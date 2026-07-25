@@ -10,8 +10,14 @@ is invented.
 
 States: `idle`, `readiness`, `rollout`, `steady`, `incident`.
 
+Bootstrap convention: when `ops/state.md` does not exist, the current
+state is the synthetic literal `(none)` — not `idle`, not an error. `(none)`
+is never a legal `to` value; nothing transitions back into it, and deleting
+the state file is not a transition.
+
 from | to | actor | precondition
 --- | --- | --- | ---
+(none) | idle | user | ops/state.md does not yet exist; user initializes the ops cycle
 idle | readiness | user | user hands a merged change plus measurement design
 readiness | rollout | agent | checklist complete, every yes item has a non-empty artifact
 rollout | steady | user | user states an explicit promotion approval in their own turn

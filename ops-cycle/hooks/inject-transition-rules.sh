@@ -75,8 +75,13 @@ def load_rules(path):
     return rows, None
 
 def read_status():
+    """Current state. A missing state file is the synthetic state `(none)`
+    — a normal, renderable state, NOT the "rules could not be loaded"
+    condition. That failure block stays reserved for a missing/unparseable
+    transition-rules.md, or a state file that exists but whose status
+    field is absent, duplicated, or unparseable."""
     if not os.path.isfile(state_abs):
-        return None, "ops/state.md does not exist"
+        return "(none)", None
     try:
         with open(state_abs, encoding="utf-8-sig") as fh:
             text = fh.read(1 << 20)

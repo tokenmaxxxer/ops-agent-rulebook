@@ -199,11 +199,13 @@ if hit is False:
 STATUS_RE = re.compile(r"^status:\s*([A-Za-z_-]+)\s*(?:#.*)?$", re.M)
 
 def read_current_status():
-    """Current on-disk status. Missing file == not-yet-created (treated as
-    'idle'); an existing but unparseable file means the rules can't be
-    judged, so this denies with the rules-could-not-be-loaded message."""
+    """Current on-disk status. Missing file == not-yet-created: this is the
+    synthetic state `(none)`, judged by the transition table like any other
+    state — NOT an error, and NOT silently treated as 'idle'. An existing
+    but unparseable file means the rules can't be judged, so this denies
+    with the rules-could-not-be-loaded message."""
     if not os.path.isfile(state_abs):
-        return "idle"
+        return "(none)"
     try:
         with open(state_abs, encoding="utf-8-sig") as fh:
             text = fh.read(1 << 20)
