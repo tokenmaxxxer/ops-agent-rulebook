@@ -39,7 +39,7 @@ root = os.environ["OPS_ROOT"]
 rules_path = os.environ.get("OPS_RULES_FILE", "")
 state_abs = posixpath.normpath(posixpath.join(root.replace("\\", "/"), "ops", "state.md"))
 
-STATUS_RE = re.compile(r"^status:\s*([A-Za-z_-]+)\s*(?:#.*)?$", re.M)
+STATUS_RE = re.compile(r"^status:\s*([^\r\n#]*?)\s*(?:#.*)?$", re.M)
 
 def fail(reason):
     print("## ops-cycle transition rules — COULD NOT BE LOADED")
@@ -74,12 +74,19 @@ def load_rules(path):
         return None, "transition-rules.md has no parseable rows"
     return rows, None
 
-def read_status():
-    """Current state. A missing state file is the synthetic state `(none)`
-    — a normal, renderable state, NOT the "rules could not be loaded"
-    condition. That failure block stays reserved for a missing/unparseable
-    transition-rules.md, or a state file that exists but whose status
-    field is absent, duplicated, or unparseable."""
+def read_status(known_states):
+    """Current state, derived from FILE EXISTENCE ALONE — never by comparing
+    the parsed value against the `(none)` string. A missing state file is
+    the synthetic state `(none)` — a normal, renderable state, NOT the
+    "rules could not be loaded" condition.
+
+    If the file EXISTS, its status must be a member of `known_states`
+    (trailing whitespace/CRLF stripped; whitespace-only counts as empty).
+    `(none)` as the on-disk value, an empty value, a missing/duplicated
+    `status:` field, and any value outside `known_states` are all the same
+    broken-input case — this is the failure block already reserved for a
+    broken table or broken state field, and it must agree with the gate: a
+    state the gate refuses to leave is never rendered here as legitimate."""
     if not os.path.isfile(state_abs):
         return "(none)", None
     try:
@@ -98,10 +105,18 @@ def read_status():
         return None, "ops/state.md's frontmatter has no `status:` field"
     if len(matches) > 1:
         return None, "ops/state.md's frontmatter has a duplicated `status:` field"
-    return matches[0].strip().lower(), None
+    value = matches[0].strip("\r\n \t").strip().lower()
+    if not value or value not in known_states:
+        return None, (
+            "ops/state.md's `status:` value (%r) is `(none)`, empty, or not a member "
+            "of this role's known-state set" % value
+        )
+    return value, None
 
 rows, rules_err = load_rules(rules_path)
-status, status_err = read_status()
+known_states = {r[0].lower() for r in (rows or [])} | {r[1].lower() for r in (rows or [])}
+known_states.discard("(none)")
+status, status_err = read_status(known_states)
 
 if rules_err or status_err:
     reasons = [r for r in (rules_err, status_err) if r]

@@ -71,6 +71,32 @@ else
   fail=$((fail+1))
 fi
 
+# (g) state file exists with value (none) -> DENY, rules-could-not-be-loaded
+run_case "existing-none-sentinel" 2 \
+$'---\nstatus: (none)\n---\n' \
+'{"tool_name":"Write","tool_input":{"file_path":"ops/state.md","content":"---\nstatus: idle\n---\n"}}'
+
+# (h) state file exists with empty status value -> DENY likewise
+run_case "existing-empty-status" 2 \
+$'---\nstatus:\n---\n' \
+'{"tool_name":"Write","tool_input":{"file_path":"ops/state.md","content":"---\nstatus: idle\n---\n"}}'
+
+# (i) state file exists with a value outside the known-state set -> DENY likewise
+run_case "existing-out-of-set-status" 2 \
+$'---\nstatus: bogus-typo-state\n---\n' \
+'{"tool_name":"Write","tool_input":{"file_path":"ops/state.md","content":"---\nstatus: idle\n---\n"}}'
+
+# (j) state file exists with a valid value followed by trailing whitespace/CRLF
+# -> treated as that valid state (not broken); a legal transition from it is ALLOWED
+run_case "existing-valid-trailing-whitespace-crlf" 0 \
+$'---\r\nstatus: idle   \r\n---\r\n' \
+'{"tool_name":"Write","tool_input":{"file_path":"ops/state.md","content":"---\nstatus: readiness\n---\n"}}'
+
+# (k) state file genuinely absent -> the (none) -> X bootstrap row is still ALLOWED
+run_case "genuinely-absent-bootstrap-allowed" 0 \
+"" \
+'{"tool_name":"Write","tool_input":{"file_path":"ops/state.md","content":"---\nstatus: idle\n---\n"}}'
+
 echo
 echo "Results: $pass passed, $fail failed"
 if [ "$fail" -ne 0 ]; then
