@@ -1,5 +1,5 @@
 ---
-status: approved
+status: landed
 files:
   - product-agent-rulebook/docs/proposals/2026-07-25-agent-roles-and-state-machines.md
   - product-agent-rulebook/docs/proposals/2026-07-25-agent-rulebook-repos.md
