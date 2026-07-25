@@ -1,0 +1,11 @@
+{
+  "name": "ops-agent-env",
+  "version": "0.1.0",
+  "description": "One-install ops environment: pulls in ops-cycle as a dependency. Contains no code of its own.",
+  "author": {
+    "name": "Jung Jiwon & Lee Jongkwan"
+  },
+  "dependencies": [
+    "ops-cycle"
+  ]
+}

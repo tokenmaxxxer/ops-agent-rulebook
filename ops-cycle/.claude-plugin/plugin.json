@@ -1,0 +1,8 @@
+{
+  "name": "ops-cycle",
+  "version": "0.1.0",
+  "description": "The ops role's state machine (docs/specs/agent-roles.md, ops): idle -> readiness -> rollout -> steady -> incident, carried in a readiness/rollout record file's `status` frontmatter field plus a checklist section. capture-approval.sh (UserPromptSubmit) mints a single-use approval token only from an unambiguous statement in the user's own turn, bound to the record file and the specific (from, to) transition. state-gate.sh (PreToolUse) refuses readiness -> rollout unless every checklist item resolves to yes/no with a pointable artifact on every yes, refuses rollout -> steady without a matching approval token, and mechanically refuses any release transition out of steady once the error budget is recorded exhausted.",
+  "author": {
+    "name": "Jung Jiwon & Lee Jongkwan"
+  }
+}
