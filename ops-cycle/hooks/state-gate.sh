@@ -294,8 +294,6 @@ if new_status is None:
     )
 
 frm, to = current_status, new_status
-if frm == to:
-    allow()
 
 # --- load transition-rules.md: the single source of truth for legality --
 rules_path = os.environ.get("OPS_RULES_FILE", "")
