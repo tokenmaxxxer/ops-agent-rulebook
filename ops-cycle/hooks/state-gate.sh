@@ -196,14 +196,21 @@ hit = touches_state_file()
 if hit is False:
     allow()
 
-STATUS_RE = re.compile(r"^status:\s*([A-Za-z_-]+)\s*(?:#.*)?$", re.M)
+STATUS_RE = re.compile(r"^status:\s*([^\r\n#]*?)\s*(?:#.*)?$", re.M)
 
-def read_current_status():
-    """Current on-disk status. Missing file == not-yet-created: this is the
-    synthetic state `(none)`, judged by the transition table like any other
-    state — NOT an error, and NOT silently treated as 'idle'. An existing
-    but unparseable file means the rules can't be judged, so this denies
-    with the rules-could-not-be-loaded message."""
+def read_current_status(known_states):
+    """Current on-disk status, derived from FILE EXISTENCE ALONE — never
+    from comparing a parsed value against the `(none)` string. Only a
+    genuinely absent file yields the synthetic `(none)` old state used for
+    bootstrap-row matching.
+
+    If the file EXISTS, its parsed status must be a member of
+    `known_states` (trailing whitespace/CRLF stripped first; whitespace-only
+    counts as empty). `(none)` as the on-disk value, an empty value, a
+    missing `status:` field, and any value outside `known_states` are all
+    the same case: the gate cannot establish its own input, so this denies
+    with the rules-could-not-be-loaded message — never with the
+    transition-not-in-the-table message."""
     if not os.path.isfile(state_abs):
         return "(none)"
     try:
@@ -219,7 +226,13 @@ def read_current_status():
     m = STATUS_RE.search(text[3:end])
     if not m:
         deny_rules_unloaded("ops/state.md's frontmatter has no `status:` field")
-    return m.group(1).strip().lower()
+    value = m.group(1).strip("\r\n \t").strip().lower()
+    if not value or value not in known_states:
+        deny_rules_unloaded(
+            "ops/state.md's `status:` value (%r) is `(none)`, empty, or not a member of "
+            "this role's known-state set — the gate cannot establish its own input" % value
+        )
+    return value
 
 def extract_new_status(new_text):
     if not isinstance(new_text, str) or not new_text.startswith("---"):
@@ -240,7 +253,43 @@ if hit == "maybe":
         "assumed safe."
     )
 
-current_status = read_current_status()
+# --- load transition-rules.md: the single source of truth for legality --
+rules_path = os.environ.get("OPS_RULES_FILE", "")
+
+def load_rules(path):
+    if not path or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read(1 << 20)
+    except OSError:
+        return None
+    rows = set()
+    for line in text.splitlines():
+        line = line.strip()
+        if "|" not in line:
+            continue
+        if line.lower().startswith("from") or set(line.replace("|", "").strip()) <= {"-"}:
+            continue
+        parts = [p.strip() for p in line.strip("|").split("|")]
+        if len(parts) < 2:
+            continue
+        f, t = parts[0].lower(), parts[1].lower()
+        if not f or not t:
+            continue
+        rows.add((f, t))
+    return rows if rows else None
+
+rules = load_rules(rules_path)
+if rules is None:
+    deny_rules_unloaded("transition-rules.md at %r is missing, unreadable, empty, or has no parseable rows" % rules_path)
+
+# Known-state set: every `from`/`to` value appearing in the table, minus the
+# synthetic `(none)` bootstrap sentinel. Used to validate an EXISTING state
+# file's status value (never used to invent a status for an absent file).
+known_states = {s for pair in rules for s in pair if s != "(none)"}
+
+current_status = read_current_status(known_states)
 
 # --- figure out the resulting full text of the state file, if we can ----
 new_text = None
@@ -294,37 +343,6 @@ if new_status is None:
     )
 
 frm, to = current_status, new_status
-
-# --- load transition-rules.md: the single source of truth for legality --
-rules_path = os.environ.get("OPS_RULES_FILE", "")
-
-def load_rules(path):
-    if not path or not os.path.isfile(path):
-        return None
-    try:
-        with open(path, encoding="utf-8") as fh:
-            text = fh.read(1 << 20)
-    except OSError:
-        return None
-    rows = set()
-    for line in text.splitlines():
-        line = line.strip()
-        if "|" not in line:
-            continue
-        if line.lower().startswith("from") or set(line.replace("|", "").strip()) <= {"-"}:
-            continue
-        parts = [p.strip() for p in line.strip("|").split("|")]
-        if len(parts) < 2:
-            continue
-        f, t = parts[0].lower(), parts[1].lower()
-        if not f or not t:
-            continue
-        rows.add((f, t))
-    return rows if rows else None
-
-rules = load_rules(rules_path)
-if rules is None:
-    deny_rules_unloaded("transition-rules.md at %r is missing, unreadable, empty, or has no parseable rows" % rules_path)
 
 if (frm, to) not in rules:
     deny("%s -> %s is not a row in transition-rules.md (this transition is not in the table)." % (frm, to))
