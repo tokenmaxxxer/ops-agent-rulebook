@@ -45,19 +45,28 @@ command -v python3 >/dev/null 2>&1 || {
 
 payload="$(cat 2>/dev/null || true)"
 
-root="${CLAUDE_PROJECT_DIR:-}"
-if [ -z "$root" ]; then
-  root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-fi
-if [ -z "$root" ] || [ ! -d "$root" ]; then
-  root="$(pwd -P)"
-fi
-root="$(cd "$root" 2>/dev/null && pwd -P)" || {
-  echo "ops-cycle: cannot resolve the project root; denying." >&2
-  exit 2
-}
-
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
+# Repo root discovery: walk UP from this hook script's own location to the
+# nearest enclosing `.git`. The process working directory and
+# CLAUDE_PROJECT_DIR are never consulted — a hook invoked with a cwd outside
+# the repo must still resolve to, and guard, this repo's own state file.
+root=""
+walk="$script_dir"
+while :; do
+  if [ -e "$walk/.git" ]; then
+    root="$walk"
+    break
+  fi
+  if [ "$walk" = "/" ]; then
+    break
+  fi
+  walk="$(dirname "$walk")"
+done
+if [ -z "$root" ]; then
+  echo "ops-cycle: refused — the transition rules could not be loaded (no enclosing .git found while walking up from the hook's own location); no transition may be made until this is fixed." >&2
+  exit 2
+fi
 
 OPS_PAYLOAD="$payload" OPS_ROOT="$root" OPS_RULES_FILE="$script_dir/transition-rules.md" python3 <<'PY'
 import json, os, posixpath, re, sys

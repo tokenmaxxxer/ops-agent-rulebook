@@ -11,16 +11,34 @@
 # never exit empty.
 set -uo pipefail
 
-root="${CLAUDE_PROJECT_DIR:-}"
-if [ -z "$root" ]; then
-  root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-fi
-if [ -z "$root" ] || [ ! -d "$root" ]; then
-  root="$(pwd -P)"
-fi
-root="$(cd "$root" 2>/dev/null && pwd -P)" || root="$(pwd -P)"
-
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+
+# Repo root discovery: walk UP from this hook script's own location to the
+# nearest enclosing `.git`. The process working directory and
+# CLAUDE_PROJECT_DIR are never consulted, so this always agrees with
+# state-gate.sh's resolution of the same file.
+root=""
+walk="$script_dir"
+while :; do
+  if [ -e "$walk/.git" ]; then
+    root="$walk"
+    break
+  fi
+  if [ "$walk" = "/" ]; then
+    break
+  fi
+  walk="$(dirname "$walk")"
+done
+if [ -z "$root" ]; then
+  cat <<'EOF'
+## ops-cycle transition rules — COULD NOT BE LOADED
+
+No enclosing .git was found while walking up from this hook's own location,
+so the ops role's repository root cannot be resolved. No transition may be
+made until this is fixed.
+EOF
+  exit 0
+fi
 
 if ! command -v python3 >/dev/null 2>&1; then
   cat <<'EOF'
