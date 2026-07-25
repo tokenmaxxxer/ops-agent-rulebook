@@ -1,19 +1,39 @@
 ---
 name: readiness-checklist
 description: >-
-  Use when working the ops role's readiness or rollout state (ops/state.md
-  status: readiness, or preparing to promote rollout -> steady, or closing
-  an incident back to steady). Walks the launch-readiness discipline this
-  role is built on: every checklist item resolves to yes/no backed by a
-  pointable artifact, never "we have monitoring" with nothing to link.
-  Also covers the exact wording state-gate.sh (PreToolUse) and
-  capture-approval.sh (UserPromptSubmit) require, so edits to ops/state.md
-  pass the gate on the first try instead of being refused and retried.
+  Use when working the ops role's readiness state (ops/state.md status:
+  readiness), preparing to move readiness -> rollout, or checking what
+  state-gate.sh (PreToolUse) requires before a write to ops/state.md will
+  pass. Walks the launch-readiness discipline this role is built on: every
+  checklist item resolves to yes/no backed by a pointable artifact, never
+  "we have monitoring" with nothing to link. There is no approval-token
+  mechanism here — actor: user rows are satisfied by the model reading the
+  user's own turn and judging the precondition met, not by minting or
+  checking a token.
   Do NOT use for writing the specification or feasibility work upstream of
-  ops — this is scoped to readiness, rollout, steady, and incident only.
+  ops — this is scoped to readiness, and to the readiness-adjacent parts of
+  rollout, steady, and incident only.
 ---
 
 # readiness-checklist — the ops role's gate, worked from the inside
+
+Belongs to the `readiness` state. Asks the user, dimension by dimension,
+whether each of the seven Production Readiness Review (PRR) items is
+satisfied and — for every "yes" — what the pointable artifact is (a
+dashboard URL, a config key, a runbook path). Writes the checklist into
+`ops/state.md`'s `## Checklist` section, the file this plugin's `readiness
+-> rollout` transition is gated on.
+
+The seven dimensions (converged open-source PRR shape, `docs/reports/
+research/2026-07-27-role-practice/ops.md`):
+
+1. Service Levels — is the SLO/SLI defined?
+2. Architecture Design Review — has the design been reviewed?
+3. Performance — has it been load-tested?
+4. Documentation — does a runbook exist?
+5. Observability — do dashboards/alerts exist?
+6. Testing — has failure-injection been done?
+7. Deployment Strategy — is a rollback path defined?
 
 This role's state machine (`docs/specs/state-machine.md`) is enforced
 mechanically by two hooks in this plugin, not by judgment calls. This skill
@@ -69,17 +89,29 @@ that failed and why — fix that item's `artifact:` field (or flip it to
 redirection with a different form — the gate reads the target path for any
 tool, so that produces the same refusal.
 
+## Working `readiness -> rollout`, and `rollout`'s own agent-owned steps
+
+Once every checklist item resolves and every `yes` has a real artifact, the
+agent moves itself to `rollout` — no human gate on this step. From there,
+`rollout -> rollout` (canary step promotion on a clean metric check) and
+`rollout -> incident` (breach past a hard pre-set threshold) are both
+`actor: agent` rows the `rollout-plan` skill's declared thresholds drive
+mechanically. See `ops-cycle/skills/rollout-plan/SKILL.md`.
+
 ## Working `rollout -> steady`
 
-Gated on a human approval token this skill cannot mint for you — only
-`ops-cycle/hooks/capture-approval.sh` mints it, and only from an
-unambiguous statement in the user's own turn (e.g. "I approve promoting
-this to steady state", "approved for production"). A bare "ok" or "looks
-good" does not mint a token — state the approval explicitly, naming
-"steady" or "production" alongside an approval/promotion verb. If you are
-the agent and need this transition, say so to the user and ask them to
-state the approval themselves; do not write `status: steady` and hope —
-the gate checks for `ops/tokens/promote.token` and denies without it.
+There is no approval-token mechanism. This transition is `actor: user`: it
+may only be taken once the user has said something in their own turn that
+unambiguously states the promotion approval (e.g. "I approve promoting this
+to steady state", "approved for production"). A bare "ok" or "looks good"
+is not enough — if the user's turn is vague, ask them to state the
+approval explicitly, naming "steady" or "production" alongside an
+approval/promotion verb, rather than writing `status: steady` on a guess.
+Before writing `ops/state.md`, record which of the user's own utterances
+you read as satisfying this precondition — the injected transition rules
+require this record as a line in the state file; nothing enforces it
+mechanically, so do it because the row's `actor: user` designation depends
+on it having actually happened.
 
 ## Steady state and the error budget
 
@@ -97,8 +129,13 @@ true.
 ## Closing an incident
 
 `steady -> incident` fires on a monitored signal crossing its declared
-threshold; nothing here gates that direction. Closing back,
-`incident -> steady`, requires a non-empty `postmortem:` field in
-`ops/state.md`'s frontmatter naming the filed postmortem (a path under
-`docs/reports/`, following the `blameless-postmortem` discipline). Write
-the postmortem first, then close the loop.
+threshold; nothing here gates that direction. Closing back to `steady` is
+`actor: user` and requires more than a filled-in field: the postmortem
+(`ops-cycle/skills/postmortem/SKILL.md`) must be filed *and* the user must
+say, in their own turn, that a human reviewer has reviewed it and is
+satisfied with the document and its action items — Google's own rule is
+that "an unreviewed postmortem might as well never have existed," so a bare
+non-empty `postmortem:` field is not sufficient on its own. `incident ->
+readiness` is a separate, later `actor: user` row: postmortem action-item
+sign-off specifically gates re-entry into a release cycle for the affected
+surface, distinct from the general close.

@@ -17,10 +17,13 @@ the state file is not a transition.
 
 from | to | actor | precondition
 --- | --- | --- | ---
-(none) | idle | user | ops/state.md does not yet exist; user initializes the ops cycle
+(none) | idle | agent | ops/state.md does not yet exist; agent initializes the ops cycle — changed from `user`: no sourced practice puts a human gate on state-file creation itself, only on in-flight decisions below (docs/proposals/2026-07-28-role-workflow-plugins.md)
 idle | readiness | user | user hands a merged change plus measurement design
-readiness | rollout | agent | checklist complete, every yes item has a non-empty artifact
-rollout | steady | user | user states an explicit promotion approval in their own turn
+readiness | rollout | agent | checklist complete, every yes item has a non-empty pointable artifact
+rollout | rollout | agent | canary step promotion when the metric/threshold check is clean against a pre-defined, unambiguous threshold — Argo/Flagger/Kayenta auto-promote loops are real production practice for exactly this
+rollout | incident | agent | canary metric breach past a hard pre-set threshold — sourced as automatic in mature tooling; raising costs nothing and understating costs more
+rollout | steady | user | user states an explicit promotion approval in their own turn — traffic cutover to full/production is a human call even when the tooling that gets it to the last canary step is automatic
 steady | incident | agent | a monitored signal crosses its declared threshold
-incident | steady | agent | postmortem field is non-empty, naming a filed postmortem
-steady | readiness | user | user hands a new change and error_budget is not exhausted
+incident | steady | user | postmortem is filed *and* a human ("senior engineers," per the sourced practice) has reviewed it and is satisfied with the document and its action items — a bare non-empty postmortem field is not sufficient
+incident | readiness | user | postmortem action-item sign-off gates re-entry into a release cycle for the affected surface specifically, distinct from the general incident -> steady close
+steady | readiness | user | user hands a new change and the error budget is not exhausted
