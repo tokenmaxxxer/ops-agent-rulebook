@@ -61,13 +61,30 @@ whatever contract the work repo carries; if that file is absent,
 `ops-cycle/hooks/state-gate.sh` refuses handoff-protocol actions rather
 than proceeding without one.
 
-### ACCEPTS
+### WAKES-ON
 
-- `build-proposal` — what merged.
-- `hypothesis` or `feasibility-record` — the measurement design. `ops` does
-  not invent what "healthy" means; it consumes the definition set upstream.
-- Refuses `qa-state` and `review-record` — ops acts on review's finished
-  verdict via the merge itself, not by reading review's per-finding record.
+Per contract v2 §3's `ops` row: ops wakes on a change landed (merged) that
+is ready to roll out.
+
+### READ / DEPENDS-ON / NEVER-OVERWRITE
+
+Per contract v2 §4, replacing v1's single ACCEPTS/refuse lever — which
+conflated "may ops read this" with "may ops depend on this" — with three
+separate questions:
+
+- **READ (broad).** ops may read any board record under
+  `docs/reports/records/**` and any `docs/proposals/*` file, unconditionally,
+  for context. Reading something is never itself a violation.
+- **DEPENDS-ON (narrow).** Per contract §4's own line: "ops depends on
+  `build-proposal` (what merged) and `hypothesis` / `feasibility-record`
+  (the measurement design)." `ops` does not invent what "healthy" means; it
+  consumes the definition set upstream.
+- **NEVER-OVERWRITE.** Per contract §11's table row for `ops`, ops writes
+  only `docs/reports/records/<subject>/ops.md` (`kind: ops-record`) and
+  `docs/reports/records/<subject>/postmortems/<incident-slug>.md`
+  (`kind: postmortem`). An existing record already at a path ops does not
+  own is refused and reported to the user — never overwritten or merged
+  silently (see `### STOPS` below).
 
 ### WHERE UPSTREAM LIVES
 
@@ -77,16 +94,20 @@ than proceeding without one.
 
 ### PRODUCES
 
-- `ops-state` at `docs/reports/records/<subject>/ops.md`. Required fields:
-  role status (`idle,readiness,rollout,steady,incident`), `error_budget:
+- `ops-record` at `docs/reports/records/<subject>/ops.md`, per contract §2's
+  `ops-record` table row. Required fields: `loop_state`
+  (`idle,readiness,rollout,steady,incident`), `error_budget:
   ok|exhausted`, `postmortem: <pointer>`, a `## Checklist` section
   (`- item: <desc> | status: yes|no | artifact: <url/path/config key>`),
-  plus the common header including `handoff_status`.
+  plus the common header (contract §1).
 
-  Tension flagged, not resolved, by the contract: `ops-state` is
-  continuously updated (steady, incident, error-budget change in place) yet
-  sits in doctrine's point-in-time `reports/` bucket. This excerpt carries
-  that note forward rather than resolving it here.
+  Tension flagged, not resolved, by the contract: per contract §10,
+  "`ops-record` is rewritten in place as current system state changes
+  (steady, incident, error-budget), not appended to as a dated record,
+  unlike the rest of `reports`." The contract states this mismatch rather
+  than resolving it; this rulebook carries that note forward rather than
+  silently treating `ops-record` as append-only the way
+  `coding.md`/`feasibility.md`/`qa.md` are.
 
 - `postmortem` at
   `docs/reports/records/<subject>/postmortems/<incident-slug>.md`. Required
@@ -94,20 +115,35 @@ than proceeding without one.
   follow-up (owner+tracking+closing-condition), Review (named human
   reviewer).
 
+### FINDING BACK-EDGE
+
+Per contract v2 §5, ops may both produce and receive `finding` blocks. When
+ops closes a finding addressed to it (`addressed_to: ops`), its
+`ops-record` write must carry a `finding-response` entry containing: the
+finding reference (record path plus finding identifier), the action taken
+or, if declined, the reason for declining, and — when a fix changed
+something — proof of the fix (commit sha, targeted re-run result, or
+equivalent). An entry missing any of these three parts does not close the
+finding, per contract §5's own completeness rule.
+
+### LOOP TERMINATION
+
+Per contract v2 §6: a wake ops observes is consumed only by writing the
+resulting `ops-record` entry (a `loop_state` change, a new `finding`, or a
+`finding-response`); an unchanged board wakes no one, so a wake that
+produces no board change is not a valid consumption of it.
+
 ### STOPS
 
-- Upstream stale at role entry: the recorded `sha` for whichever of
-  `build-proposal`/`hypothesis`/`feasibility-record` was read no longer
-  matches that path's current `sha`. Stop before further work; ask the user
-  to proceed on the recorded version or re-confirm against current.
+- Upstream stale at role entry (contract §12): the recorded `sha` for
+  whichever of `build-proposal`/`hypothesis`/`feasibility-record` was read
+  no longer matches that path's current `sha`. Stop before further work;
+  ask the user to proceed on the recorded version or re-confirm against
+  current.
 - An existing record already at a path ops does not own under
-  `docs/reports/records/`: refuse to write, report the conflict (path and
-  whose territory it falls in) to the user — never overwrite or merge in
-  silently.
-- Input carries `handoff_status: provisional`: ops may read it to plan or
-  draft against, but must not treat it as final input to an accept/refuse
-  decision or as the baseline for the staleness check until it reads
-  `final`.
+  `docs/reports/records/` (contract §11): refuse to write, report the
+  conflict (path and whose territory it falls in) to the user — never
+  overwrite or merge in silently.
 
 ## Install
 
