@@ -2,4 +2,3 @@
 # ops-cycle is installed into — never inside this repository itself, but
 # ignored here too in case a smoke test is ever run from this checkout.
 ops/state.md
-ops/tokens/

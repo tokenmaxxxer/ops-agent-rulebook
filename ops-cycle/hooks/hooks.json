@@ -5,14 +5,14 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/capture-approval.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/inject-transition-rules.sh"
           }
         ]
       }
     ],
     "PreToolUse": [
       {
-        "matcher": ".*",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
         "hooks": [
           {
             "type": "command",
