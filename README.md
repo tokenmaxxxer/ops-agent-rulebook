@@ -52,6 +52,62 @@ Two hooks in `ops-cycle` enforce it:
   unparseable state file, an undeterminable resulting `status:`) the gate
   denies — it never falls through to allow.
 
+## Handoff protocol
+
+Excerpted from `docs/specs/role-handoff-contract.md` (root `tokenmaxxxer`
+repo) at `2affe5db7dfb285abaa2860d3004edb3f97c9aec` — ops's rows only. If
+that contract's current SHA no longer matches the pin above,
+`ops-cycle/hooks/state-gate.sh` refuses to proceed until this excerpt is
+re-pinned.
+
+### ACCEPTS
+
+- `build-proposal` — what merged.
+- `hypothesis` or `feasibility-record` — the measurement design. `ops` does
+  not invent what "healthy" means; it consumes the definition set upstream.
+- Refuses `qa-state` and `review-record` — ops acts on review's finished
+  verdict via the merge itself, not by reading review's per-finding record.
+
+### WHERE UPSTREAM LIVES
+
+- `build-proposal`: `docs/proposals/<date>-build-<slug>.md`
+- `hypothesis`: `docs/proposals/<date>-<slug>.md`
+- `feasibility-record`: `docs/reports/records/<subject>/feasibility.md`
+
+### PRODUCES
+
+- `ops-state` at `docs/reports/records/<subject>/ops.md`. Required fields:
+  role status (`idle,readiness,rollout,steady,incident`), `error_budget:
+  ok|exhausted`, `postmortem: <pointer>`, a `## Checklist` section
+  (`- item: <desc> | status: yes|no | artifact: <url/path/config key>`),
+  plus the common header including `handoff_status`.
+
+  Tension flagged, not resolved, by the contract: `ops-state` is
+  continuously updated (steady, incident, error-budget change in place) yet
+  sits in doctrine's point-in-time `reports/` bucket. This excerpt carries
+  that note forward rather than resolving it here.
+
+- `postmortem` at
+  `docs/reports/records/<subject>/postmortems/<incident-slug>.md`. Required
+  fields: Impact, Actions taken during response, Root cause(s), Prevention
+  follow-up (owner+tracking+closing-condition), Review (named human
+  reviewer).
+
+### STOPS
+
+- Upstream stale at role entry: the recorded `sha` for whichever of
+  `build-proposal`/`hypothesis`/`feasibility-record` was read no longer
+  matches that path's current `sha`. Stop before further work; ask the user
+  to proceed on the recorded version or re-confirm against current.
+- An existing record already at a path ops does not own under
+  `docs/reports/records/`: refuse to write, report the conflict (path and
+  whose territory it falls in) to the user — never overwrite or merge in
+  silently.
+- Input carries `handoff_status: provisional`: ops may read it to plan or
+  draft against, but must not treat it as final input to an accept/refuse
+  decision or as the baseline for the staleness check until it reads
+  `final`.
+
 ## Install
 
 ```

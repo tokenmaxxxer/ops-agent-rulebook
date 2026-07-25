@@ -205,6 +205,84 @@ hit = touches_state_file()
 if hit is False:
     allow()
 
+# --- contract SHA pin: README.md's "Handoff protocol" section pins the ---
+# --- SHA of docs/specs/role-handoff-contract.md (root tokenmaxxxer repo) -
+# --- it was excerpted from. This applies the contract's own staleness ---
+# --- mechanism (its section 4) to the contract itself: if the pinned SHA
+# --- no longer matches the contract's current SHA, this gate refuses any
+# --- state transition until the excerpt is re-pinned. -------------------
+PINNED_SHA_RE = re.compile(
+    r"Excerpted from `docs/specs/role-handoff-contract\.md`.*?at `([0-9a-f]{7,40})`",
+    re.S,
+)
+
+def read_pinned_sha():
+    readme_path = posixpath.join(root, "README.md")
+    if not os.path.isfile(readme_path):
+        return None
+    try:
+        with open(readme_path, encoding="utf-8") as fh:
+            text = fh.read(1 << 20)
+    except OSError:
+        return None
+    m = PINNED_SHA_RE.search(text)
+    return m.group(1) if m else None
+
+def find_contract_repo_root():
+    # docs/specs/role-handoff-contract.md is the shared contract, landed in
+    # the root tokenmaxxxer repo — a sibling of this rulebook's own repo,
+    # not a file inside it (this repo shares no file with any sibling, per
+    # README). Walk up from this repo's own root looking for an ancestor
+    # directory that carries that path, so the check works whether this
+    # rulebook is checked out standalone (no ancestor has it, and the check
+    # then no-ops) or nested under the root repo's checkout (as in this
+    # workspace).
+    walk = root
+    while True:
+        candidate = posixpath.join(walk, "docs/specs/role-handoff-contract.md")
+        if os.path.isfile(candidate) and os.path.isdir(posixpath.join(walk, ".git")):
+            return walk
+        parent = posixpath.dirname(walk)
+        if parent == walk:
+            return None
+        walk = parent
+
+def current_contract_sha():
+    import subprocess
+    contract_root = find_contract_repo_root()
+    if contract_root is None:
+        return None
+    try:
+        out = subprocess.run(
+            ["git", "log", "-1", "--format=%H", "--", "docs/specs/role-handoff-contract.md"],
+            cwd=contract_root, capture_output=True, text=True, timeout=10,
+        )
+    except Exception:
+        return None
+    if out.returncode != 0:
+        return None
+    sha = out.stdout.strip()
+    return sha or None
+
+pinned_sha = read_pinned_sha()
+if pinned_sha is not None:
+    current_sha = current_contract_sha()
+    # If the root tokenmaxxxer repo (and its docs/specs/role-handoff-contract.md)
+    # is not reachable from this checkout — e.g. this rulebook installed
+    # standalone, per its own self-contained-ness — the pin cannot be
+    # verified either way. That is not evidence of staleness, so this does
+    # not deny; it is silently unverifiable rather than fail-closed, since
+    # denying every transition on every standalone install would make the
+    # SHA pin a de facto kill switch on normal use, which this gate's own
+    # header comment (above) says it must never be.
+    if current_sha is not None and not pinned_sha.startswith(current_sha) and not current_sha.startswith(pinned_sha):
+        deny(
+            "README.md's Handoff protocol section pins docs/specs/role-handoff-contract.md "
+            "at %s, but that contract's current SHA is %s in this repo's history — the "
+            "excerpt is stale. Re-pin the excerpt (or confirm no substantive change) before "
+            "any state transition proceeds." % (pinned_sha, current_sha)
+        )
+
 STATUS_RE = re.compile(r"^status:\s*([^\r\n#]*?)\s*(?:#.*)?$", re.M)
 
 def read_current_status(known_states):
