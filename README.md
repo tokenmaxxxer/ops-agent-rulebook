@@ -54,11 +54,12 @@ Two hooks in `ops-cycle` enforce it:
 
 ## Handoff protocol
 
-Excerpted from `docs/specs/role-handoff-contract.md` (root `tokenmaxxxer`
-repo) at `2affe5db7dfb285abaa2860d3004edb3f97c9aec` — ops's rows only. If
-that contract's current SHA no longer matches the pin above,
-`ops-cycle/hooks/state-gate.sh` refuses to proceed until this excerpt is
-re-pinned.
+The authoritative contract is this work repo's own
+`docs/specs/role-handoff-contract.md` — not any pinned excerpt or external
+copy. This section describes only how the ops role behaves against
+whatever contract the work repo carries; if that file is absent,
+`ops-cycle/hooks/state-gate.sh` refuses handoff-protocol actions rather
+than proceeding without one.
 
 ### ACCEPTS
 
