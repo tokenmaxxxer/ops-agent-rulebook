@@ -84,20 +84,41 @@ def resolve(path):
 REDIRECT_RE = re.compile(r'(?:^|\s)(?:\d)?>{1,2}\s*(\S+)')
 TEE_RE = re.compile(r'\btee\b(?:\s+-a)?\s+(\S+)')
 CP_MV_RE = re.compile(r'\b(?:cp|mv)\b.*?\s(\S+)\s*$')
-SED_I_RE = re.compile(r'\b(?:sed|perl|ruby)\b[^|;]*\s-i\S*\s+(?:[^\s]+\s+)*?(\S+\.md\S*)')
+SED_I_RE = re.compile(r'\b(?:sed|perl|ruby)\b[^|;]*\s-i\S*\s+(?:[^\s]+\s+)*?(\S+)')
+DD_RE = re.compile(r'\bdd\b[^|;]*\bof=(\S+)')
+INSTALL_RE = re.compile(r'\binstall\b(?:\s+-\S+)*\s+(?:\S+\s+)*?(\S+)\s*$')
+EVAL_RE = re.compile(r'(?:^|[\s;&|])eval\b')
+HEREDOC_RE = re.compile(r'(?:^|[\s;&|])cat\s*>{1,2}\s*(\S+)\s*<<')
 
-def bash_targets(command):
-    """Every path this shell command could write to, best-effort but
-    conservative: if the command touches a redirection/tee/cp/mv/sed -i
-    form at all, every candidate target is resolved and checked — this
-    gate does not need to understand the whole command, only to notice
-    when one of its targets is the guarded state file."""
+# A target token is "literal" — statically resolvable to a fixed path —
+# only if it is made up of plain path characters with no shell
+# indirection: no $VAR / ${VAR}, no command substitution $(...) or
+# backticks, no glob metacharacters, no ~ expansion, no quoting that
+# could be hiding an expansion. Anything else cannot be resolved
+# without executing/interpreting the shell, which this gate refuses to
+# do (no eval of payload content).
+LITERAL_TOKEN_RE = re.compile(r'^[A-Za-z0-9_./+=,@%-]+$')
+
+def is_literal(token):
+    if not token:
+        return False
+    if any(ch in token for ch in ("$", "`", "*", "?", "[", "]", "~", "(", ")")):
+        return False
+    return bool(LITERAL_TOKEN_RE.match(token))
+
+def bash_write_targets(command):
+    """Every path token this shell command could write to, paired with
+    whether that token is a plain literal path we can resolve. Best-effort
+    but conservative: if the command touches a redirection/tee/cp/mv/
+    sed -i/dd/install/heredoc form at all, every candidate target is
+    surfaced — this gate does not need to understand the whole command,
+    only to notice when a target is (or might be) the guarded state file."""
     targets = []
-    for rx in (REDIRECT_RE, TEE_RE, CP_MV_RE, SED_I_RE):
+    for rx in (REDIRECT_RE, TEE_RE, CP_MV_RE, SED_I_RE, DD_RE, INSTALL_RE, HEREDOC_RE):
         for m in rx.finditer(command):
-            t = m.group(1).strip().strip("'\"")
-            if t:
-                targets.append(t)
+            raw = m.group(1).strip()
+            stripped = raw.strip("'\"")
+            targets.append((raw, stripped))
     return targets
 
 def touches_state_file():
@@ -110,8 +131,22 @@ def touches_state_file():
         command = tool_input.get("command")
         if not isinstance(command, str) or not command.strip():
             return False
-        for t in bash_targets(command):
-            if resolve(t) == state_abs:
+        # `eval` makes the actual write target depend on runtime string
+        # construction this gate cannot statically evaluate — refuse to
+        # eval the payload ourselves, deny instead (rule 2 / rule 3).
+        if EVAL_RE.search(command):
+            return "maybe"
+        for raw, stripped in bash_write_targets(command):
+            if raw.startswith("-"):
+                # An option flag, not a path target.
+                continue
+            if not is_literal(stripped):
+                # A write-shaped construct whose target is a variable,
+                # command substitution, glob, or other indirection: the
+                # resolved path cannot be determined statically. Fail
+                # closed rather than assume it isn't the state file.
+                return "maybe"
+            if resolve(stripped) == state_abs:
                 return True
         # A command that plainly names the state file path but doesn't match
         # any of the write-shaped patterns above (e.g. `rm ops/state.md`,
@@ -199,9 +234,12 @@ def extract_new_checklist_and_budget(new_text):
 
 if hit == "maybe":
     deny(
-        "a command names ops/state.md in a shape this gate does not recognize as a "
-        "plain write (not a redirect/tee/cp/mv/sed -i it can read the target of). "
-        "Denying rather than guessing whether it changes `status:`."
+        "this Bash command has a write-shaped construct (redirect/tee/cp/mv/sed -i/dd/"
+        "install/heredoc/eval) whose target path cannot be resolved statically (a "
+        "variable, command substitution, glob, indirection, or eval), or otherwise names "
+        "ops/state.md in a shape this gate does not recognize as a plain write. Rule: "
+        "unresolvable Bash write targets deny fail-closed rather than being assumed safe "
+        "against ops/state.md."
     )
 
 current = read_current()
