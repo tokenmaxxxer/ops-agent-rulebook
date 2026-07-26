@@ -280,6 +280,16 @@ run_case "prdd-write-text-own-allowed" 0 \
 $'---\nstatus: idle\n---\n' \
 '{"tool_name":"Bash","tool_input":{"command":"python3 -c \"import pathlib; pathlib.Path('"'"'docs/reports/records/gate-fix/ops.md'"'"').write_text('"'"'x'"'"')\""}}'
 
+# --- fail-closed-on-internal-error (docs/proposals/2026-07-26-gates-fail-closed-on-internal-error.md)
+# A crash-inducing payload must resolve to a DENY (exit 2), never an
+# uncaught exit 1 (which PreToolUse treats as fail-open).
+
+# (s) null byte in file_path -> os.path.realpath raises ValueError in the
+# judge -> the python excepthook / shell rc-map turn it into exit 2, not 1.
+run_case "crash-null-byte-in-file-path-denies-2" 2 \
+$'---\nstatus: idle\n---\n' \
+'{"tool_name":"Write","tool_input":{"file_path":"ops/\u0000state.md","content":"---\nstatus: idle\n---\n"}}'
+
 echo
 echo "Results: $pass passed, $fail failed"
 if [ "$fail" -ne 0 ]; then

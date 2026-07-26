@@ -106,6 +106,41 @@ run "trailer: non-git-commit bash passes" trailer-gate.sh allow "$proj" \
 run "trailer: malformed payload fails closed" trailer-gate.sh deny "$proj" \
   'not json{{{'
 
+# ---- fail-closed-on-internal-error --------------------------------------
+# docs/proposals/2026-07-26-gates-fail-closed-on-internal-error.md: a
+# crash-inducing payload must resolve to exit 2 (DENY) EXACTLY, never an
+# uncaught exit 1 (which PreToolUse treats as fail-open). Assert the exact
+# code, not just "non-zero".
+run2() {
+  local name="$1" gate="$2" json="$3"
+  local out actual
+  out="$(printf '%s' "$json" | CLAUDE_PROJECT_DIR="$proj" bash "$script_dir/$gate" 2>&1)"
+  actual=$?
+  if [ "$actual" -eq 2 ]; then
+    echo "PASS: $name ($gate -> exit 2 DENY on crash payload)"
+    pass=$((pass+1))
+  else
+    echo "FAIL: $name ($gate -> expected exit 2, got $actual)"
+    echo "  output: $out"
+    fail=$((fail+1))
+  fi
+}
+
+# Null byte in file_path -> os.path.realpath raises ValueError in the judge;
+# the python excepthook + shell rc-map must turn it into exit 2.
+NULLPATH='docs/reports/records/checkout-flow/\u0000ops.md'
+run2 "crash: record-fields null-byte path -> exit 2" record-fields-gate.sh \
+  "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$NULLPATH\",\"content\":\"x\"}}"
+run2 "crash: path-ownership null-byte path -> exit 2" path-ownership-gate.sh \
+  "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$NULLPATH\",\"content\":\"x\"}}"
+run2 "crash: doc-bucket null-byte path -> exit 2" doc-bucket-gate.sh \
+  "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"docs/\\u0000x.md\",\"content\":\"x\"}}"
+# Commit-time gates: malformed JSON is the crash vector -> exact exit 2.
+run2 "crash: handbook-trigger malformed JSON -> exit 2" handbook-trigger-gate.sh \
+  'not json{{{'
+run2 "crash: trailer malformed JSON -> exit 2" trailer-gate.sh \
+  'not json{{{'
+
 rm -rf "$proj"
 echo
 echo "Results: $pass passed, $fail failed"

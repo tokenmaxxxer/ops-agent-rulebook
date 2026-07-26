@@ -26,8 +26,22 @@ command -v python3 >/dev/null 2>&1 || {
 
 payload="$(cat 2>/dev/null || true)"
 
-OPS_PAYLOAD="$payload" python3 <<'PY'
+rc=0
+OPS_PAYLOAD="$payload" python3 <<'PY' || rc=$?
 import json, os, posixpath, sys
+
+# fail-closed layer 2 (python): any uncaught exception in the judge -- e.g.
+# os.path.realpath on a null-byte/undecodable path raising ValueError -- becomes
+# a DENY (exit 2), never an uncaught exit 1 (fail-open). deny()/allow() use
+# sys.exit (SystemExit), which bypasses the excepthook, so verdicts are exact.
+def _ops_fail_closed(_t, _e, _tb):
+    try:
+        sys.stderr.write("ops-cycle: fail-closed: internal error (%s: %s)\n" % (getattr(_t, "__name__", _t), _e))
+        sys.stderr.flush()
+    except Exception:
+        pass
+    os._exit(2)
+sys.excepthook = _ops_fail_closed
 
 BUCKETS = ("decisions", "handbooks", "reports", "specs", "proposals", "_assets")
 SKIP_DIRS = (
@@ -127,3 +141,10 @@ sys.stderr.write(
 )
 sys.exit(2)
 PY
+# fail-closed layer 1 (shell): map ANY judge exit that is neither 0 nor 2 to a
+# DENY; the `|| rc=$?` guard keeps set -e from aborting on a bare non-2 code.
+if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
+  echo "ops-cycle: fail-closed: internal error (doc-bucket-gate.sh judge exited $rc); denying." >&2
+  exit 2
+fi
+exit "$rc"
