@@ -113,6 +113,11 @@ not a claim that opening happens automatically today. This is the intended
 narrowing of the human's job: carrying the table's judgment of "does the
 board match this row," not carrying memory of what should happen next.
 
+**Round-end value-gates edge.** A subject reaching candidate round-done wakes
+the human to run section 18's two value gates before round-done may be set:
+candidate-round-done -> (gates A and B run) -> round-done. Like every wake in
+this table, this edge is human-consulted, never automated — see section 18.
+
 ## 4. Consumption semantics
 
 Replaces v1's ACCEPTS/refuse table with three separate questions, at the
@@ -245,6 +250,9 @@ human relaying a handoff.
 - Resolving cross-role disputes that DEPENDS-ON rules (section 4) do not
   settle.
 - Approving scope changes.
+- Running section 18's two round-end value gates and setting a subject's
+  `round-done` state — required before `round-done` may be set, never
+  automated.
 
 ## 9. Minting `subject`
 
@@ -476,3 +484,48 @@ unilaterally wherever it was first needed. This section assigns ownership.
 - Whichever record does the naming, the other role's DEPENDS-ON reading of
   it (section 4) is unchanged: this section assigns naming authority, it
   does not add a new DEPENDS-ON edge.
+
+## 18. Round-end value gates
+
+A subject's round is not done merely because every role produced its
+record. Two standing goals of this whole system — that the multi-role
+procedure actually improves the deliverable, and that the git records alone
+let a zero-context reader pick the work back up — are not guaranteed by
+following the process; they must be MEASURED as outcomes at round end, not
+assumed from process compliance. This section defines the two gates and the
+round-done state they gate.
+
+**(A) Procedure-value gate.** A role or handoff mechanism earns its place
+only if removing it would measurably worsen the deliverable. At round end,
+each role/mechanism that ran during the round is judged: did it change the
+outcome or catch something real — cite the evidence (a bug caught, a
+decision a later reader needed, a genuine handoff) — or did it only produce
+a record because the process said to? Anything that cannot show it changed
+the outcome is marked `ritual` for that round. Persisting `ritual` across
+rounds is a defect the next contract revision must remove or convert to
+real value. This gate never asserts "the step was performed" — it asserts
+"the step earned its keep."
+
+**(B) Blind-onboarding gate.** Before a round is declared done, an agent
+with ZERO session context, given only the repository, must (1) reconstruct
+what was asked/built/decided for the round's subject from records alone,
+and (2) state what to do next and act on it — recording every stuck point,
+contradiction, or unverifiable claim it hits along the way. The round
+passes only if a no-context reader can both reconstruct AND continue
+without out-of-band help; any stuck point is a records defect to fix, not a
+gate to route around.
+
+**(C) `round-done` definition and trigger.** A subject reaches `round-done`
+when the last role to act sets a terminal `loop_state` for the subject
+declaring the round finished. Gates A and B above are a REQUIRED
+human-consulted judgment-point that must fire BEFORE `round-done` may be
+set — registered per section 3's round-end value-gates edge and section 8's
+human's-seat entry, named in the structure exactly like every other
+handoff. This stays human-routed: the human runs the gates and sets
+`round-done`; it is NOT an automated watcher. A `round-done` set without
+both gates having fired is a contract violation the structure can point to.
+
+**Mechanism is out of scope.** How a round PASSES these gates — sha
+conventions, single-source-of-truth numbering, or any other concrete
+mechanism — is out of scope for this section. Passing the gate is what
+matters; the mechanism is each round's own choice.
