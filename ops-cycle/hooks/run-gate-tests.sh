@@ -202,6 +202,39 @@ run_case "bash-python-open-indeterminate-target-in-records-tree" 2 \
 $'---\nstatus: idle\n---\n' \
 '{"tool_name":"Bash","tool_input":{"command":"python3 -c \"import sys; open('"'"'docs/reports/records/'"'"' + sys.argv[1] + '"'"'/qa.md'"'"','"'"'w'"'"').write('"'"'x'"'"')\" gate-fix"}}'
 
+# --- path-reference default-deny (docs/proposals/2026-07-26-gate-nested-shell-default-deny.md)
+# Each of these targets a FOREIGN role's record slot via a write idiom this
+# gate never enumerated by name (write_text/write_bytes/os.write) or via a
+# nested shell / command substitution wrapper around a plain write. The
+# rule is not "match this idiom" — it is "default-deny any reference into
+# the owned record tree this gate cannot prove is read-only" — so all must
+# be refused regardless of idiom. Own-record writes via the same idioms
+# stay ALLOWED.
+
+run_case "prdd-write-text-foreign" 2 \
+$'---\nstatus: idle\n---\n' \
+'{"tool_name":"Bash","tool_input":{"command":"python3 -c \"import pathlib; pathlib.Path('"'"'docs/reports/records/gate-fix/qa.md'"'"').write_text('"'"'x'"'"')\""}}'
+
+run_case "prdd-write-bytes-foreign" 2 \
+$'---\nstatus: idle\n---\n' \
+'{"tool_name":"Bash","tool_input":{"command":"python3 -c \"import pathlib; pathlib.Path('"'"'docs/reports/records/gate-fix/qa.md'"'"').write_bytes(b'"'"'x'"'"')\""}}'
+
+run_case "prdd-os-write-foreign" 2 \
+$'---\nstatus: idle\n---\n' \
+'{"tool_name":"Bash","tool_input":{"command":"python3 -c \"import os; fd = os.open('"'"'docs/reports/records/gate-fix/qa.md'"'"', os.O_WRONLY | os.O_CREAT); os.write(fd, b'"'"'x'"'"')\""}}'
+
+run_case "prdd-sh-c-wrapped-foreign" 2 \
+$'---\nstatus: idle\n---\n' \
+'{"tool_name":"Bash","tool_input":{"command":"sh -c \"echo x > docs/reports/records/gate-fix/qa.md\""}}'
+
+run_case "prdd-cmd-subst-wrapped-foreign" 2 \
+$'---\nstatus: idle\n---\n' \
+'{"tool_name":"Bash","tool_input":{"command":"echo x > $(echo docs/reports/records/gate-fix/qa.md)"}}'
+
+run_case "prdd-write-text-own-allowed" 0 \
+$'---\nstatus: idle\n---\n' \
+'{"tool_name":"Bash","tool_input":{"command":"python3 -c \"import pathlib; pathlib.Path('"'"'docs/reports/records/gate-fix/ops.md'"'"').write_text('"'"'x'"'"')\""}}'
+
 echo
 echo "Results: $pass passed, $fail failed"
 if [ "$fail" -ne 0 ]; then

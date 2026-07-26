@@ -213,25 +213,121 @@ def owned_path_write_targets():
 for _owned_target in owned_path_write_targets():
     check_owned_path(_owned_target)
 
-# §11: a write-capable Bash python-open() call whose target could not be
-# resolved to a literal path (e.g. built from concatenation or a
-# variable), in a command that names the owned record tree, is
-# default-denied rather than allowed through — the target might land on a
-# foreign role's record and this gate cannot prove it doesn't.
+# --- path-reference default-deny (frozen contract) --------------------
+# docs/proposals/2026-07-26-gate-nested-shell-default-deny.md: for a Bash
+# call, default-deny whenever the command TEXT references any path inside
+# the owned record tree docs/reports/records/<subject>/ (own or another
+# role's), unless the reference is PROVABLY READ-ONLY: only read-type
+# commands touch it, no nested-shell invocation (sh -c/bash -c/eval/
+# env ... sh/xargs), no command substitution ($( )/backticks), and no
+# write idiom anywhere in the command (>, >>, tee, dd of=,
+# open(...,'w'/'x'/'a', .write(, .write_text(, .write_bytes(, os.write().
+# This does not depend on enumerating write idioms — failing the
+# read-only proof is itself the denial trigger, so any un-enumerated
+# idiom is still caught by the same rule. A single, sufficient exemption:
+# every write-idiom target this gate can statically extract (plain
+# redirect, literal open(...,'w'), literal
+# Path(...).write_text/write_bytes) resolves to ops's OWN record, with no
+# nested shell/command substitution/tee/dd/os.write — the "own-record
+# legal write" case already governed by check_owned_path above and the
+# transition-table check below.
 if tool == "Bash":
-    _cmd_for_open = tool_input.get("command")
-    if (
-        isinstance(_cmd_for_open, str)
-        and PY_OPEN_WRITE_RE.search(_cmd_for_open)
-        and not PY_OPEN_LITERAL_RE.search(_cmd_for_open)
-        and "docs/reports/records/" in _cmd_for_open
-    ):
-        deny(
-            "a Bash write-capable python open() call's target path could not be "
-            "statically resolved, and the command references the owned record tree "
-            "(docs/reports/records/). Per §11, an indeterminate write target within "
-            "that tree is default-denied rather than allowed through."
+    _prdd_cmd = tool_input.get("command")
+    _PRDD_TREE_RE = re.compile(r'docs/reports/records/[^\s"\'`)]*')
+    _PRDD_NESTED_SHELL_RE = re.compile(
+        r'\b(?:sh|bash|zsh|ksh|dash)\s+-c\b|\beval\b|\bxargs\b|'
+        r'\benv\b[^\n;&|]*\b(?:sh|bash|zsh|ksh|dash)\b'
+    )
+    _PRDD_CMD_SUBST_RE = re.compile(r'\$\(|`')
+    _PRDD_WRITE_IDIOM_RE = re.compile(
+        r'(?:^|[\s;&|])\d?>{1,2}(?!\&)|\btee\b|\bdd\b[^\n;&|]*\bof=|'
+        r'\bopen\s*\([^)]*,\s*[\'"][wxa]|'
+        r'\.write_text\s*\(|\.write_bytes\s*\(|\.write\s*\(|\bos\.write\s*\('
+    )
+    _PRDD_OPEN_ANY_RE = re.compile(r"\bopen\s*\([^)]*,\s*['\"][wxa]")
+    _PRDD_OPEN_LITERAL_RE2 = re.compile(r"\bopen\s*\(\s*(['\"])(.*?)\1\s*,\s*(['\"])[wxa]")
+    _PRDD_WT_ANY_RE = re.compile(r"\.\s*write_(?:text|bytes)\s*\(")
+    _PRDD_WT_LITERAL_RE = re.compile(r"\(\s*(['\"])(.*?)\1\s*\)\s*\.\s*write_(?:text|bytes)\s*\(")
+    _PRDD_REDIRECT_RE = re.compile(r"(?:^|[\s;&|])\d?(>>|>\|?)(?!\&)\s*(\S+)")
+    _PRDD_READ_WHITELIST = {
+        "cat", "grep", "egrep", "fgrep", "head", "tail", "test", "[", "ls",
+        "wc", "find", "stat", "diff", "file", "less", "more", "readlink",
+        "realpath", "md5sum", "sha1sum", "sha256sum", "basename", "dirname",
+        "true", "echo", "pwd",
+    }
+
+    def _prdd_leading_tokens(cmd):
+        leads = []
+        for seg in re.split(r'[;&|\n]+', cmd):
+            toks = seg.split()
+            i = 0
+            while i < len(toks) and (
+                re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', toks[i]) or toks[i] in ("sudo", "env")
+            ):
+                i += 1
+            if i < len(toks):
+                leads.append(posixpath.basename(toks[i].strip("'\"")))
+        return leads
+
+    if isinstance(_prdd_cmd, str) and _prdd_cmd and _PRDD_TREE_RE.search(_prdd_cmd):
+        _prdd_disqualified = (
+            bool(_PRDD_NESTED_SHELL_RE.search(_prdd_cmd))
+            or bool(_PRDD_CMD_SUBST_RE.search(_prdd_cmd))
+            or bool(re.search(r'\btee\b|\bdd\b[^\n;&|]*\bof=|\bos\.write\s*\(', _prdd_cmd))
         )
+        if _PRDD_OPEN_ANY_RE.search(_prdd_cmd) and not _PRDD_OPEN_LITERAL_RE2.search(_prdd_cmd):
+            _prdd_disqualified = True
+        if _PRDD_WT_ANY_RE.search(_prdd_cmd) and not _PRDD_WT_LITERAL_RE.search(_prdd_cmd):
+            _prdd_disqualified = True
+
+        _prdd_targets = []
+        for _rm in _PRDD_REDIRECT_RE.finditer(_prdd_cmd):
+            _tok = _rm.group(2)
+            if len(_tok) >= 2 and _tok[0] == _tok[-1] and _tok[0] in "\"'":
+                _tok = _tok[1:-1]
+            if not _tok.startswith("&"):
+                _prdd_targets.append(_tok)
+        for _om in _PRDD_OPEN_LITERAL_RE2.finditer(_prdd_cmd):
+            _prdd_targets.append(_om.group(2))
+        for _wm in _PRDD_WT_LITERAL_RE.finditer(_prdd_cmd):
+            _prdd_targets.append(_wm.group(2))
+
+        _prdd_plain_own_redirect_only = False
+        if _prdd_targets and not _prdd_disqualified:
+            _prdd_ok = True
+            for _tok in _prdd_targets:
+                if not _tok or re.search(r"[$`*?\[\]{}~]", _tok):
+                    _prdd_ok = False
+                    break
+                _resolved_tok = resolve(_tok)
+                _rel_tok = None
+                if _resolved_tok == root or _resolved_tok.startswith(root + "/"):
+                    _rel_tok = _resolved_tok[len(root):].lstrip("/")
+                _m_tok = RECORDS_RE.match(_rel_tok) if _rel_tok is not None else None
+                _is_own = bool(_m_tok) and _m_tok.group(2) == OWN_ROLE_FILE
+                if not _is_own:
+                    _prdd_ok = False
+                    break
+            _prdd_plain_own_redirect_only = _prdd_ok
+
+        if not _prdd_plain_own_redirect_only:
+            _prdd_proven_read_only = (
+                not _PRDD_NESTED_SHELL_RE.search(_prdd_cmd)
+                and not _PRDD_CMD_SUBST_RE.search(_prdd_cmd)
+                and not _PRDD_WRITE_IDIOM_RE.search(_prdd_cmd)
+                and all(t in _PRDD_READ_WHITELIST for t in _prdd_leading_tokens(_prdd_cmd))
+            )
+            if not _prdd_proven_read_only:
+                deny(
+                    "path-reference default-deny: this Bash command references the owned "
+                    "record tree (docs/reports/records/) and this gate could not prove the "
+                    "reference is read-only (no nested shell, no command substitution, no "
+                    "write idiom, only read-type commands touching the path). Per the frozen "
+                    "path-reference default-deny contract "
+                    "(docs/proposals/2026-07-26-gate-nested-shell-default-deny.md), an "
+                    "unproven reference into the owned record tree is refused rather than "
+                    "allowed through."
+                )
 
 def touches_state_file():
     if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
