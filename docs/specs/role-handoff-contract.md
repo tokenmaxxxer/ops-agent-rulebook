@@ -345,6 +345,16 @@ same file because each owns only the file it itself authored. This grant is
 what makes section 21's placement obligation satisfiable under this
 section's ownership scoping.
 
+**Handbook grant (component-scoped shared-write).** `docs/handbooks/<component>.md`
+is owned by the component, not by a single first-author role: any role that
+changes that component's operational surface (an environment variable,
+config key, dependency, migration, or run/setup/deploy step, per section
+21's handbook trigger) may create or update that component's handbook.
+This is deliberately different from this section's other grants, which are
+single-author write-once; a handbook is a living current-state doc that
+must track whichever role most recently touched the component's
+operational surface, per section 21's write-time maintenance rule.
+
 **Carried over, unenforced (v1 §7's flagged tension).** warrant's
 `scope-gate.sh` allows any write under `docs/` unconditionally, regardless
 of an approved proposal's `files:` write set. Nothing mechanical stops one
@@ -618,6 +628,14 @@ A role record must state, at minimum:
    record's own current `loop_state`, and any open (unresolved) `finding`
    entries touching this subject.
 
+Additionally, whenever the role leaves work open, the record must state:
+
+4. **A next-steps backlog** — what a continuer should do next, concrete
+   enough to act on without re-deriving it from scratch.
+5. **An open-finding resolution path** — for any open finding or advisory
+   the role is aware of touching this subject, the intended resolution path
+   or who owns resolving it, not just the fact that it is open.
+
 This is a minimum, not a template — role-specific required fields (section
 2's table) are additional, not replaced by this list. This section pairs
 with section 18 gate B: gate B measures, after a round, whether a
@@ -644,6 +662,28 @@ grants the ownership it requires:
   numbers or findings goes in `docs/reports/<date>-<slug>.md`, stating what
   was run, what came back, and what it means.
 - **System design tied to the code** goes in `docs/specs/`.
+- **An operational surface change** — a role that introduces or changes an
+  environment variable, a config key, a dependency, a migration, or a
+  run/setup/deploy step in the target project — must create or update
+  `docs/handbooks/<component>.md`: what it is, what it defaults to, what
+  breaks without it, and the concrete commands to install, run, and operate
+  the deliverable (not only how to test it).
+
+  A handbook is a living current-state doc, not a write-once record, so
+  section 11's "Section 21 grant" single-author ownership does not apply to
+  it. Instead, section 11 grants `docs/handbooks/<component>.md`
+  component-scoped shared-write ownership: any role that changes that
+  component's operational surface may create or update that component's
+  handbook, keyed to the component rather than to whichever role authored
+  it first — explicitly distinct from the per-role write-once record
+  ownership, which stays single-author unchanged.
+
+  **Write-time maintenance.** The role that changes a component's
+  operational surface must update that component's handbook in the same
+  unit of work that made the change (same-turn-sync), not on a separate
+  wake. This resolves the living-doc-vs-single-author-ownership
+  contradiction: last change wins as current state, and the surface-changer
+  owns the update, so no handbook is ever asserted-current-but-unmaintained.
 
 The role record links to these documents rather than duplicating their
 content — the record stays the per-role trail (what this role did, why,
