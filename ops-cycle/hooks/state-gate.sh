@@ -123,6 +123,11 @@ DD_RE = re.compile(r'\bdd\b[^|;]*\bof=(\S+)')
 INSTALL_RE = re.compile(r'\binstall\b(?:\s+-\S+)*\s+(?:\S+\s+)*?(\S+)\s*$')
 EVAL_RE = re.compile(r'(?:^|[\s;&|])eval\b')
 HEREDOC_RE = re.compile(r'(?:^|[\s;&|])cat\s*>{1,2}\s*(\S+)\s*<<')
+# write-through-another-tool: e.g. `python3 -c "open(path,
+# 'w').write(...)"`. Judged by RESOLVED TARGET PATH like every other idiom
+# above, not by which tool performs the write.
+PY_OPEN_WRITE_RE = re.compile(r'\bopen\s*\([^)]*,\s*[\'"][wxa][^\'"]*[\'"]')
+PY_OPEN_LITERAL_RE = re.compile(r"\bopen\s*\(\s*['\"]([^'\"]*)['\"]\s*,\s*['\"][wxa]")
 
 # A target token is "literal" — statically resolvable to a fixed path —
 # only if it is made up of plain path characters with no shell
@@ -157,7 +162,7 @@ def aimed_at_state_dir(token):
 
 def bash_write_targets(command):
     targets = []
-    for rx in (REDIRECT_RE, TEE_RE, CP_MV_RE, SED_I_RE, DD_RE, INSTALL_RE, HEREDOC_RE):
+    for rx in (REDIRECT_RE, TEE_RE, CP_MV_RE, SED_I_RE, DD_RE, INSTALL_RE, HEREDOC_RE, PY_OPEN_LITERAL_RE):
         for m in rx.finditer(command):
             raw = m.group(1).strip()
             stripped = raw.strip("'\"")
@@ -207,6 +212,26 @@ def owned_path_write_targets():
 
 for _owned_target in owned_path_write_targets():
     check_owned_path(_owned_target)
+
+# §11: a write-capable Bash python-open() call whose target could not be
+# resolved to a literal path (e.g. built from concatenation or a
+# variable), in a command that names the owned record tree, is
+# default-denied rather than allowed through — the target might land on a
+# foreign role's record and this gate cannot prove it doesn't.
+if tool == "Bash":
+    _cmd_for_open = tool_input.get("command")
+    if (
+        isinstance(_cmd_for_open, str)
+        and PY_OPEN_WRITE_RE.search(_cmd_for_open)
+        and not PY_OPEN_LITERAL_RE.search(_cmd_for_open)
+        and "docs/reports/records/" in _cmd_for_open
+    ):
+        deny(
+            "a Bash write-capable python open() call's target path could not be "
+            "statically resolved, and the command references the owned record tree "
+            "(docs/reports/records/). Per §11, an indeterminate write target within "
+            "that tree is default-denied rather than allowed through."
+        )
 
 def touches_state_file():
     if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):

@@ -175,6 +175,33 @@ else
   fail=$((fail+1))
 fi
 
+# --- write-detection bypass fix (docs/proposals/2026-07-26-fix-state-gate-writeop-bypass.md)
+# write-through-another-tool (python3's open()) previously matched none of
+# bash_write_targets' idioms, so a Bash write reaching a foreign record via
+# `python3 -c "open(path,'w').write(...)"` bypassed check_owned_path
+# entirely (touches_state_file() also returned False for it) and fell
+# through to allow().
+
+# (p) Bash python3-open write to a foreign role's record under the same
+# subject -> DENY, citing §11.
+run_case "bash-python-open-foreign-record-write" 2 \
+$'---\nstatus: idle\n---\n' \
+'{"tool_name":"Bash","tool_input":{"command":"python3 -c \"open('"'"'docs/reports/records/gate-fix/qa.md'"'"','"'"'w'"'"').write('"'"'x'"'"')\""}}'
+
+# (q) Bash python3-open write to ops' OWN subject-scoped record -> ALLOW
+# (ownership check passes; this gate does not further verify Bash-mediated
+# content against transition-rules.md the way it does for Write/Edit).
+run_case "bash-python-open-own-record-write" 0 \
+$'---\nstatus: idle\n---\n' \
+'{"tool_name":"Bash","tool_input":{"command":"python3 -c \"open('"'"'docs/reports/records/gate-fix/ops.md'"'"','"'"'w'"'"').write('"'"'x'"'"')\""}}'
+
+# (r) Bash python3-open write whose target path is built from concatenation
+# (not a clean literal), in a command that names the owned record tree ->
+# DENY (default-deny on an indeterminate target).
+run_case "bash-python-open-indeterminate-target-in-records-tree" 2 \
+$'---\nstatus: idle\n---\n' \
+'{"tool_name":"Bash","tool_input":{"command":"python3 -c \"import sys; open('"'"'docs/reports/records/'"'"' + sys.argv[1] + '"'"'/qa.md'"'"','"'"'w'"'"').write('"'"'x'"'"')\" gate-fix"}}'
+
 echo
 echo "Results: $pass passed, $fail failed"
 if [ "$fail" -ne 0 ]; then
