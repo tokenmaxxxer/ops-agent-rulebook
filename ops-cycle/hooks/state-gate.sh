@@ -47,24 +47,25 @@ payload="$(cat 2>/dev/null || true)"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
-# Repo root discovery: walk UP from this hook script's own location to the
-# nearest enclosing `.git`. The process working directory and
-# CLAUDE_PROJECT_DIR are never consulted — a hook invoked with a cwd outside
-# the repo must still resolve to, and guard, this repo's own state file.
-root=""
-walk="$script_dir"
-while :; do
-  if [ -e "$walk/.git" ]; then
-    root="$walk"
-    break
-  fi
-  if [ "$walk" = "/" ]; then
-    break
-  fi
-  walk="$(dirname "$walk")"
-done
+# Root is the repository being worked in: CLAUDE_PROJECT_DIR when the harness
+# sets it, otherwise the process cwd, anchored on that directory's git root so
+# an invocation from a subdirectory still resolves to the project root.
+#
+# It is deliberately NOT the nearest `.git` above this hook's own location.
+# That coincides with the project only while the rulebook is vendored into it.
+# Loaded as a plugin from its own checkout — which is how an orchestrator
+# swaps rulebooks per role — it resolves to the RULEBOOK's repo, and the gate
+# then guards a repository nobody is working in: every write in the real
+# project falls outside its owned paths, so it allows all of them and says
+# nothing. Measured 2026-07-26: a state jump skipping an intermediate state
+# was permitted with exit 0.
+root="${CLAUDE_PROJECT_DIR:-$PWD}"
+if top="$(git -C "$root" rev-parse --show-toplevel 2>/dev/null)" && [ -n "$top" ]; then
+  root="$top"
+fi
+root="$(cd "$root" 2>/dev/null && pwd -P)" || root=""
 if [ -z "$root" ]; then
-  echo "ops-cycle: refused — the transition rules could not be loaded (no enclosing .git found while walking up from the hook's own location); no transition may be made until this is fixed." >&2
+  echo "ops-cycle: refused — the transition rules could not be loaded (could not resolve the project root being worked in); no transition may be made until this is fixed." >&2
   exit 2
 fi
 

@@ -127,26 +127,29 @@ run_case "genuinely-absent-bootstrap-allowed" 0 \
 "" \
 '{"tool_name":"Write","tool_input":{"file_path":"ops/state.md","content":"---\nstatus: idle\n---\n"}}'
 
-# (l) invoked from a cwd OUTSIDE the repo, CLAUDE_PROJECT_DIR unset -------
-# Root resolution must be anchored to the hook's own on-disk location, never
-# to the process cwd or CLAUDE_PROJECT_DIR. Run the SAME payload against the
-# real on-disk gate once from inside this repo's own checkout and once from
-# an unrelated outside directory, both with CLAUDE_PROJECT_DIR unset — the
-# two must reach the identical decision, proving the outside-cwd invocation
-# still resolved and judged this repo's own ops/state.md rather than some
-# other (or no) state file.
-outside_dir="$(mktemp -d)"
+# (l) the gate follows the project, not its own location ------------------
+# Where this hook sits on disk must not decide what it guards. Copy the whole
+# hooks directory somewhere outside any project, run that copy with the
+# project as cwd, and it must reach the same decision as the in-repo copy.
+#
+# Until 2026-07-26 root was the nearest `.git` ABOVE the hook itself. A
+# rulebook loaded as a plugin from its own checkout — which is how an
+# orchestrator swaps rulebooks per role — therefore guarded the rulebook's
+# repo, and every write in the real project fell outside its owned paths and
+# was allowed, silently, exit 0.
+elsewhere="$(mktemp -d)"
+cp -R "$script_dir" "$elsewhere/hooks"
 payload_l='{"tool_name":"Write","tool_input":{"file_path":"ops/state.md","content":"---\nstatus: idle\n---\n"}}'
 out_in="$(cd "$repo_root" && env -u CLAUDE_PROJECT_DIR bash -c 'printf "%s" "$1" | "$2"' _ "$payload_l" "$gate" 2>&1)"
 code_in=$?
-out_out="$(cd "$outside_dir" && env -u CLAUDE_PROJECT_DIR bash -c 'printf "%s" "$1" | "$2"' _ "$payload_l" "$gate" 2>&1)"
+out_out="$(cd "$repo_root" && env -u CLAUDE_PROJECT_DIR bash -c 'printf "%s" "$1" | bash "$2"' _ "$payload_l" "$elsewhere/hooks/state-gate.sh" 2>&1)"
 code_out=$?
-rm -rf "$outside_dir"
+rm -rf "$elsewhere"
 if [ "$code_in" -eq "$code_out" ]; then
-  echo "PASS: outside-repo-cwd-resolution (exit $code_out matches exit $code_in from inside the repo)"
+  echo "PASS: gate-location-independence (out-of-tree copy exit $code_out matches in-repo exit $code_in)"
   pass=$((pass+1))
 else
-  echo "FAIL: outside-repo-cwd-resolution (outside exit $code_out diverged from inside exit $code_in) — outside: $out_out | inside: $out_in"
+  echo "FAIL: gate-location-independence (in-repo exit $code_in, out-of-tree exit $code_out) — out: $out_out | in: $out_in"
   fail=$((fail+1))
 fi
 
