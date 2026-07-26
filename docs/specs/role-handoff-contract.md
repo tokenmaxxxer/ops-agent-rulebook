@@ -70,7 +70,7 @@ coding's records, closing the trial's two unsanctioned-kind gaps.
 | `finding` | any role | inline block within the addressing role's own record | n/a | `requirement`, `verdict` (`Present\|Surface\|Absent\|Incorrect\|Unverifiable`), `evidence`, `rationale`, `spec_vs_built` (required only when `verdict: Incorrect`), `addressed_to: <role>`, `severity: blocking\|advisory` — see item 4 |
 | `ops-record` | ops | `docs/reports/records/<subject>/ops.md` | `idle,readiness,rollout,steady,incident` | `error_budget: ok\|exhausted`, `postmortem: <pointer>`, `## Checklist` (`- item: <desc> \| status: yes\|no \| artifact: <url/path/config key>`); `## Deploy-config` REQUIRED whenever `feasibility-record` did not enumerate the deploy/runtime config surface — see section 17 |
 | `postmortem` | ops | `docs/reports/records/<subject>/postmortems/<incident-slug>.md` | n/a (closed report) | Impact, Actions taken during response, Root cause(s), Prevention follow-up (owner+tracking+closing-condition), Review (named human reviewer) |
-| `reflect-record` | reflect | `docs/reports/records/<subject>/reflect.md` | `idle,reflecting,done` | pointer to the subject's other role records read; what went well, what failed, what pattern should change next time |
+| `reflect-record` | reflect | `docs/reports/records/<subject>/reflect.md` | `idle,reflecting,candidate-round-done,round-done` | pointer to the subject's other role records read; what went well, what failed, what pattern should change next time |
 
 `kind` parsing by any gate must tolerate a trailing comment on the line
 (`kind: build-proposal  # re-scoped`); a regex anchored to end-of-line with
@@ -516,8 +516,10 @@ without out-of-band help; any stuck point is a records defect to fix, not a
 gate to route around.
 
 **(C) `round-done` definition and trigger.** A subject reaches `round-done`
-when the last role to act sets a terminal `loop_state` for the subject
-declaring the round finished. Gates A and B above are a REQUIRED
+when its `reflect-record` (section 2) — the last record to act in a round —
+has its `loop_state` set to `round-done`, from `candidate-round-done`, the
+same two states named in section 3's round-end value-gates edge. Gates A
+and B above are a REQUIRED
 human-consulted judgment-point that must fire BEFORE `round-done` may be
 set — registered per section 3's round-end value-gates edge and section 8's
 human's-seat entry, named in the structure exactly like every other
