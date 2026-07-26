@@ -4,14 +4,14 @@ status: final
 
 # Role handoff contract (v2: blackboard/event model)
 
-Authority document for how the seven role rulebooks — coding, qa,
-feasibility, product, ops, review, verify — coordinate inside the target
-repository each is working on. v1 modeled coordination as one-shot parcel
-handoffs between adjacent roles; v2 replaces that with a shared blackboard
-each role reads, writes its own record onto, and wakes from. This document
-defines the shared record format; it does not itself change any of the
-seven rulebooks. Landing this contract in each rulebook is separate, one
-proposal per repo.
+Authority document for how the eight role rulebooks — coding, qa,
+feasibility, product, ux-design, ops, review, verify — coordinate inside the
+target repository each is working on. v1 modeled coordination as one-shot
+parcel handoffs between adjacent roles; v2 replaces that with a shared
+blackboard each role reads, writes its own record onto, and wakes from. This
+document defines the shared record format; it does not itself change any of
+the eight rulebooks. Landing this contract in each rulebook is separate,
+one proposal per repo.
 
 ## 1. Common header
 
@@ -22,7 +22,7 @@ role-specific fields section 2 requires:
 kind: <artifact kind string, see section 2>
 subject: <stable identifier for the piece of work, shared by every role
           touching it>
-produced_by: coding | qa | feasibility | product | ops | review | verify
+produced_by: coding | qa | feasibility | product | ux-design | ops | review | verify
 upstream:
   - path: <repo-root-relative path>
     sha: <commit SHA the artifact was read at>
@@ -50,7 +50,7 @@ loop_state: <this role's own state-machine position; see section 2's
 
 Every role writes exactly one status record onto the blackboard,
 `docs/reports/records/<subject>/<role>.md`, plus zero or more per-item
-sub-artifacts. All seven roles are sanctioned here, including product's and
+sub-artifacts. All eight roles are sanctioned here, including product's and
 coding's records, closing the trial's two unsanctioned-kind gaps.
 
 | kind | produced by | path | `loop_state` vocabulary | required fields beyond common header |
@@ -64,6 +64,7 @@ coding's records, closing the trial's two unsanctioned-kind gaps.
 | `qa-record` | qa | `docs/reports/records/<subject>/qa.md` (fully in-repo; see section 6) | `observed,reproducing,reproduced,handed-off,re-verifying,verified-fixed,not-a-defect,wont-fix` | intake profile, bug reports, regression records, run stats — all in-repo under this record's area |
 | `feasibility-record` | feasibility | `docs/reports/records/<subject>/feasibility.md` | `idle,scoped,probing,verdict` | `market_argument_supplied: false`, `technical`/`prior_art`/`legal_regulatory`/`threat_model` (each `unresolved\|pass:<evidence>\|fail:<evidence>\|blocked:<evidence>`), `verdict: go\|no-go\|conditional` (required once `loop_state` reaches `verdict`), `measurement_design: <description or pointer>` |
 | `spike-report` | feasibility | `docs/reports/records/<subject>/spikes/<spike-slug>.md` | n/a (closed report) | Spike Title, Description/Goal, Type, Timebox, Acceptance Criteria, Tasks, Outcomes, Recommendation, Open questions, Reversibility tag; fixture-N notation if fixtures are involved (records the fixture count it was authored against, so a downstream re-run can detect additions/removals) |
+| `ux-design-record` | ux-design | `docs/reports/records/<subject>/ux-design.md` | `idle,drafting,reviewed` | pointer to the governing `hypothesis`/`product-record`; screen/flow/wireframe specs or pointers to them |
 | `review-record` | review | `docs/reports/records/<subject>/review.md` | `idle,scoped,auditing,draft-reported,reported` | — |
 | `verify-record` | verify | `docs/reports/records/<subject>/verify.md` | `idle,reproducing,reproduced,cleared` | what was attempted, what reproduced (if anything), reproduction evidence (repro steps, commit sha, run output) |
 | `finding` | any role | inline block within the addressing role's own record | n/a | `requirement`, `verdict` (`Present\|Surface\|Absent\|Incorrect\|Unverifiable`), `evidence`, `rationale`, `spec_vs_built` (required only when `verdict: Incorrect`), `addressed_to: <role>`, `severity: blocking\|advisory` — see item 4 |
@@ -86,9 +87,10 @@ the model's parallelism comes from, not an edge case.
 | role | wakes on |
 |---|---|
 | feasibility | a new or changed `hypothesis` record appears on the board |
-| coding | a feasibility `verdict: go`; a `qa-record` defect carrying a human is-this-a-defect verdict; a `finding` with `addressed_to: coding` |
+| coding | a feasibility `verdict: go`; a `qa-record` defect carrying a human is-this-a-defect verdict; a `finding` with `addressed_to: coding`; a `ux-design-record` reaching `loop_state: reviewed` |
 | qa | any commit touching `src/`/`tests/` in the running system |
 | review | any commit landed by coding |
+| ux-design | a new or changed `product-record` (or `hypothesis`, for a chain-root case) appears on the board |
 | product | a qa or review outcome whose content questions the standing acceptance criteria |
 | ops | a change landed (merged) that is ready to roll out |
 | verify | coding and qa have both produced artifacts for a subject (first wake); again before landing, as a pre-land gate (second wake) |
@@ -133,6 +135,12 @@ different concerns (see qa row below).
     it alone is not.
   - ops depends on `build-proposal` (what merged) and `hypothesis` /
     `feasibility-record` (the measurement design).
+  - ux-design depends on `hypothesis` and `product-record` (the accepted
+    problem framing its screens/flows answer). `ux-design`'s contract entry
+    enforces structure only — that a `ux-design-record` exists per subject,
+    its WAKES-ON edge after product, and that it feeds coding on reaching
+    `loop_state: reviewed` — and does not dictate what counts as good
+    design; that judgment is ux-design's own.
   - verify depends on `coding-record`, `qa-record`, and `review-record` — it
     reads what was built, what qa already tried, and what review concluded,
     then goes looking for what none of them caught. It emits `finding`
@@ -153,7 +161,7 @@ different concerns (see qa row below).
 ## 5. The finding back-edge
 
 Any role may post a `finding` addressed to any owning role via the board —
-generalized from v1, where only review produced findings, to all six roles.
+generalized from v1, where only review produced findings, to all eight roles.
 
 - `addressed_to: <role>` names the role that owns the fix.
 - `severity: blocking | advisory`. `blocking` means loops that DEPEND ON the
@@ -274,6 +282,7 @@ seventh bucket to fit it.
 | coding | `docs/proposals/<date>-build-<slug>.md` (`kind: build-proposal`), `docs/reports/records/<subject>/coding.md` |
 | qa | `docs/reports/records/<subject>/qa.md`, `docs/reports/records/<subject>/qa/**` (all in-repo, section 10) |
 | feasibility | `docs/reports/records/<subject>/feasibility.md`, `docs/reports/records/<subject>/spikes/<spike-slug>.md` |
+| ux-design | `docs/reports/records/<subject>/ux-design.md` |
 | review | `docs/reports/records/<subject>/review.md` (including inline `finding` blocks) |
 | ops | `docs/reports/records/<subject>/ops.md`, `docs/reports/records/<subject>/postmortems/<incident-slug>.md` |
 | verify | `docs/reports/records/<subject>/verify.md` (including inline `finding` blocks) |
