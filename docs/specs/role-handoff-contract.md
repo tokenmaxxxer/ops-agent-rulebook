@@ -331,6 +331,20 @@ filename tag: coding's `build-proposal` filenames carry `-build-`
 (`<date>-build-<slug>.md`), distinct on its face from product's
 `<date>-<slug>.md`.
 
+**Section 21 grant.** Each role additionally owns, in the target project,
+the specific `docs/decisions/<date>-<slug>.md`, `docs/reports/<date>-<slug>.md`,
+and `docs/specs/` entries that role itself authors under section 21's
+trigger — never the directory as a whole, only the file(s) it writes there.
+This mirrors this table's existing `records/<subject>/<role>.md` grain: a
+role that makes a hard-to-reverse choice owns its own
+`docs/decisions/<date>-<slug>.md`; a role that produces a measurement,
+benchmark, test run, or investigation owns its own
+`docs/reports/<date>-<slug>.md`; a role whose work is system design tied to
+the code owns its own `docs/specs/` entry. Two roles never collide on the
+same file because each owns only the file it itself authored. This grant is
+what makes section 21's placement obligation satisfiable under this
+section's ownership scoping.
+
 **Carried over, unenforced (v1 §7's flagged tension).** warrant's
 `scope-gate.sh` allows any write under `docs/` unconditionally, regardless
 of an approved proposal's `files:` write set. Nothing mechanical stops one
@@ -616,7 +630,10 @@ passes instead of failing on records that only show completion, not basis.
 The role record (section 11) is the subject-scoped work trail; it is not
 the only place durable project knowledge belongs. In the target project's
 own `docs/`, a role that produces one of the following must file it at the
-stated location instead of folding it into the role record:
+stated location instead of folding it into the role record. Section 11's
+"Section 21 grant" paragraph is what gives each role write-ownership of the
+file it authors here — this section states the obligation, that paragraph
+grants the ownership it requires:
 
 - **A hard-to-reverse choice** — a library, file format, schema, protocol,
   storage engine, or interface picked over a named alternative, or any
