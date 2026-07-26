@@ -7,23 +7,53 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 gate="$script_dir/state-gate.sh"
 
 tmp_root="$(mktemp -d)"
-trap 'rm -rf "$tmp_root"' EXIT
+
+# state-gate.sh resolves its repo root by walking UP from its own on-disk
+# location to the nearest enclosing .git — it never consults
+# CLAUDE_PROJECT_DIR or the process cwd (see state-gate.sh's own header
+# comment). That means a per-case tmp_root/ops/state.md is never actually
+# read by the gate: any case that depends on a specific ops/state.md
+# CONTENT must stage that content at THIS repo's own real ops/state.md,
+# invoke the gate, then restore whatever was there before. tmp_root is
+# still used for cases that don't depend on state-file content (e.g. the
+# malformed-JSON and empty-stdin cases below, and as a scratch CWD for
+# case (l)'s outside-repo probe).
+repo_root="$(cd "$script_dir/../.." && pwd -P)"
+real_state="$repo_root/ops/state.md"
+state_backup="$tmp_root/state-backup.md"
+had_state=0
+if [ -f "$real_state" ]; then
+  had_state=1
+  cp "$real_state" "$state_backup"
+fi
+restore_real_state() {
+  if [ "$had_state" -eq 1 ]; then
+    mkdir -p "$(dirname "$real_state")"
+    cp "$state_backup" "$real_state"
+  else
+    rm -f "$real_state"
+  fi
+}
+trap 'restore_real_state; rm -rf "$tmp_root"' EXIT
 
 fail=0
 pass=0
 
 # run_case NAME EXPECTED_EXIT STATE_CONTENT(or empty for none) JSON
+#
+# STATE_CONTENT is staged at this repo's own real ops/state.md (see note
+# above), invoked against the gate, then the real file is restored to
+# whatever it held before the suite ran.
 run_case() {
   local name="$1" expected="$2" state_content="$3" json="$4"
-  local work="$tmp_root/$name"
-  mkdir -p "$work/ops"
+  mkdir -p "$(dirname "$real_state")"
   if [ -n "$state_content" ]; then
-    printf '%s' "$state_content" > "$work/ops/state.md"
+    printf '%s' "$state_content" > "$real_state"
   else
-    rm -f "$work/ops/state.md"
+    rm -f "$real_state"
   fi
   local out
-  out="$(CLAUDE_PROJECT_DIR="$work" printf '%s' "$json" | CLAUDE_PROJECT_DIR="$work" bash "$gate" 2>&1)"
+  out="$(printf '%s' "$json" | bash "$gate" 2>&1)"
   local actual=$?
   if [ "$actual" -eq "$expected" ]; then
     echo "PASS: $name (exit $actual)"
@@ -105,7 +135,6 @@ run_case "genuinely-absent-bootstrap-allowed" 0 \
 # two must reach the identical decision, proving the outside-cwd invocation
 # still resolved and judged this repo's own ops/state.md rather than some
 # other (or no) state file.
-repo_root="$(cd "$script_dir/../.." && pwd -P)"
 outside_dir="$(mktemp -d)"
 payload_l='{"tool_name":"Write","tool_input":{"file_path":"ops/state.md","content":"---\nstatus: idle\n---\n"}}'
 out_in="$(cd "$repo_root" && env -u CLAUDE_PROJECT_DIR bash -c 'printf "%s" "$1" | "$2"' _ "$payload_l" "$gate" 2>&1)"
