@@ -60,15 +60,15 @@ coding's records, closing the trial's two unsanctioned-kind gaps.
 | `one-pager` | product | `product/one-pager.md` | n/a (standing doc, not per-subject) | Background/Context, Problem Statement, Candidate Hypotheses, Known Risks, Goals/Success Metrics |
 | `opportunity-tree` | product | `product/opportunity-tree.md` | n/a (continuous interview log) | — |
 | `build-proposal` | coding | `docs/proposals/<date>-build-<slug>.md` | `proposed,approved,landed` | `files:` (write-set freeze list), `## Request`, `## Constraints`, `## What will be done`, `## Out of scope` |
-| `coding-record` | coding | `docs/reports/records/<subject>/coding.md` | same as `build-proposal`, plus `finding-response` sub-entries per item 4 | pointer to active `build-proposal`; commit shas landed |
+| `coding-record` | coding | `docs/reports/records/<subject>/coding.md` | same as `build-proposal`, plus `finding-response` sub-entries per item 4, plus `findings-resolved` per section 15 | pointer to active `build-proposal`; commit shas landed; `resolved_findings:` list (when applicable) — see section 15 |
 | `qa-record` | qa | `docs/reports/records/<subject>/qa.md` (fully in-repo; see section 6) | `observed,reproducing,reproduced,handed-off,re-verifying,verified-fixed,not-a-defect,wont-fix` | intake profile, bug reports, regression records, run stats — all in-repo under this record's area |
-| `feasibility-record` | feasibility | `docs/reports/records/<subject>/feasibility.md` | `idle,scoped,probing,verdict` | `market_argument_supplied: false`, `technical`/`prior_art`/`legal_regulatory`/`threat_model` (each `unresolved\|pass:<evidence>\|fail:<evidence>\|blocked:<evidence>`), `verdict: go\|no-go\|conditional` (required once `loop_state` reaches `verdict`), `measurement_design: <description or pointer>` |
+| `feasibility-record` | feasibility | `docs/reports/records/<subject>/feasibility.md` | `idle,scoped,probing,verdict` | `market_argument_supplied: false`, `technical`/`prior_art`/`legal_regulatory`/`threat_model` (each `unresolved\|pass:<evidence>\|fail:<evidence>\|blocked:<evidence>`), `verdict: go\|no-go\|conditional` (required once `loop_state` reaches `verdict`), `measurement_design: <description or pointer>`; `technical` enumerates the deploy/runtime config surface (env var names the build must honor) whenever it is foreseeable at feasibility time — see section 17 |
 | `spike-report` | feasibility | `docs/reports/records/<subject>/spikes/<spike-slug>.md` | n/a (closed report) | Spike Title, Description/Goal, Type, Timebox, Acceptance Criteria, Tasks, Outcomes, Recommendation, Open questions, Reversibility tag; fixture-N notation if fixtures are involved (records the fixture count it was authored against, so a downstream re-run can detect additions/removals) |
 | `ux-design-record` | ux-design | `docs/reports/records/<subject>/ux-design.md` | `idle,drafting,reviewed` | pointer to the governing `hypothesis`/`product-record`; screen/flow/wireframe specs or pointers to them |
-| `review-record` | review | `docs/reports/records/<subject>/review.md` | `idle,scoped,auditing,draft-reported,reported` | — |
-| `verify-record` | verify | `docs/reports/records/<subject>/verify.md` | `idle,reproducing,reproduced,cleared` | what was attempted, what reproduced (if anything), reproduction evidence (repro steps, commit sha, run output) |
+| `review-record` | review | `docs/reports/records/<subject>/review.md` | `idle,scoped,auditing,draft-reported,reported` | `closed_checks:` list keyed to the reviewed code sha — see section 16 |
+| `verify-record` | verify | `docs/reports/records/<subject>/verify.md` | `idle,reproducing,reproduced,cleared` | what was attempted, what reproduced (if anything), reproduction evidence (repro steps, commit sha, run output); `closed_checks:` list keyed to the reviewed code sha — see section 16 |
 | `finding` | any role | inline block within the addressing role's own record | n/a | `requirement`, `verdict` (`Present\|Surface\|Absent\|Incorrect\|Unverifiable`), `evidence`, `rationale`, `spec_vs_built` (required only when `verdict: Incorrect`), `addressed_to: <role>`, `severity: blocking\|advisory` — see item 4 |
-| `ops-record` | ops | `docs/reports/records/<subject>/ops.md` | `idle,readiness,rollout,steady,incident` | `error_budget: ok\|exhausted`, `postmortem: <pointer>`, `## Checklist` (`- item: <desc> \| status: yes\|no \| artifact: <url/path/config key>`) |
+| `ops-record` | ops | `docs/reports/records/<subject>/ops.md` | `idle,readiness,rollout,steady,incident` | `error_budget: ok\|exhausted`, `postmortem: <pointer>`, `## Checklist` (`- item: <desc> \| status: yes\|no \| artifact: <url/path/config key>`); `## Deploy-config` REQUIRED whenever `feasibility-record` did not enumerate the deploy/runtime config surface — see section 17 |
 | `postmortem` | ops | `docs/reports/records/<subject>/postmortems/<incident-slug>.md` | n/a (closed report) | Impact, Actions taken during response, Root cause(s), Prevention follow-up (owner+tracking+closing-condition), Review (named human reviewer) |
 | `reflect-record` | reflect | `docs/reports/records/<subject>/reflect.md` | `idle,reflecting,done` | pointer to the subject's other role records read; what went well, what failed, what pattern should change next time |
 
@@ -96,6 +96,13 @@ the model's parallelism comes from, not an edge case.
 | ops | a change landed (merged) that is ready to roll out |
 | verify | coding and qa have both produced artifacts for a subject (first wake); again before landing, as a pre-land gate (second wake) |
 | reflect | a subject's work has landed and verify and/or review have concluded (a `verify-record` reaching `cleared`, or a `review-record` reaching `reported`) |
+
+**Resolved-finding re-verify edge.** A role that raised a blocking `finding`
+also wakes when the addressed role's own record reaches
+`loop_state: findings-resolved` with a `resolved_findings` entry naming the
+finder's record path and the finder-record sha it addresses: finding-raised
+-> (fix) -> findings-resolved -> re-verify. Like every WAKES-ON row, this
+edge is human-consulted, never automated — see section 15.
 
 **Who evaluates these rows.** No automated watcher exists yet in this
 operating model. The human's session opens a role's rulebook when the board
@@ -386,3 +393,86 @@ left implicit.
 A passing structural check (kind matched, sha matched, wake fired) clears a
 role to proceed under this contract; it is not evidence the artifact is
 sound. That judgment stays with the role reading it.
+
+## 15. Finding-resolution handshake
+
+Section 5 defines how a `finding` is raised and how the addressed role's
+`finding-response` closes it out. It does not define how the role that
+*raised* the finding learns to re-verify it — this section does.
+
+- The fixer (the role that addressed the finding) records resolution in its
+  **own** record only. Per section 4's NEVER-OVERWRITE rule, the fixer must
+  never write to the finder's record — resolution is signaled forward, not
+  written backward.
+- The fixer's record carries a `resolved_findings:` list, each entry naming
+  the finder record's path and the finder-record sha it addresses:
+
+  ```yaml
+  resolved_findings:
+    - finder_path: <path to the finder's record>
+      finder_sha: <sha of the finder's record at the finding it addresses>
+  ```
+
+- The fixer sets `loop_state: findings-resolved` on its own record when it
+  writes a `resolved_findings` entry. This is in addition to, not instead
+  of, the `finding-response` entry section 5 already requires.
+- **Wake edge.** finding-raised -> (fix) -> `findings-resolved` -> re-verify.
+  The finder is re-woken to re-verify, per section 3's resolved-finding
+  edge. Like all wakes in this contract, this edge is human-consulted, not
+  automated: the human sees `loop_state: findings-resolved` on the board and
+  opens the finder's role to re-check.
+- Re-verification itself is the finder's own judgment (per section 4's
+  per-role DEPENDS-ON rules for that role); reaching `findings-resolved`
+  clears the fixer's side of the handshake, it does not itself close the
+  finding — only the finder's re-verification does that.
+
+## 16. Closed-checks cite-and-skip (verify/review division of labor)
+
+verify (adversarial) and review (5-lens) both read the same built code and
+can re-derive the same conclusions blind to each other's work. This section
+gives them a hand-off mechanism, without turning either into a rubber stamp
+for the other.
+
+- A role's record declares which checks/lenses/probes it CLOSED, via a
+  `closed_checks:` list keyed to the exact code sha it closed them on:
+
+  ```yaml
+  closed_checks:
+    - check: <lens/probe name>
+      code_sha: <commit sha of the code this check was closed against>
+  ```
+
+- A downstream role MAY cite-and-skip a check another role already closed —
+  citing the `closed_checks` entry instead of re-deriving it — **only when**
+  the closing entry's `code_sha` equals the code sha currently under review.
+  A check closed on a different sha does not count as closed; the code
+  changed since, so the downstream role MUST run it itself.
+- Any check not present in a prior role's `closed_checks` at the current
+  code sha MUST still be run by the downstream role. This section is not a
+  mandate to skip — it is a mechanism to avoid blind re-derivation of checks
+  someone has already closed on the exact code being looked at.
+- This does not loosen section 4's independence rule: a `verify` finding
+  with `severity: blocking` is still not overridden by a clean
+  `review-record`, and vice versa. Citing a closed check narrows what must
+  be re-derived; it does not merge the two roles' verdicts.
+
+## 17. Deploy-config ownership
+
+No role owned naming deploy/runtime config (e.g. `PORT` and other env var
+names the build must honor) prior to this section, which let it be invented
+unilaterally wherever it was first needed. This section assigns ownership.
+
+- **Default: feasibility owns it when foreseeable.** feasibility's
+  `technical` field (section 2's `feasibility-record` row) enumerates the
+  deploy/runtime config surface — the env var names and their meaning — when
+  that surface is foreseeable at feasibility time. When feasibility's record
+  states it, that record is the authority coding and ops build against.
+- **Fallback: ops's REQUIRED deploy-config section.** When feasibility did
+  not foresee a piece of the deploy-config surface, `ops-record`'s
+  `## Deploy-config` section (section 2's `ops-record` row) is REQUIRED and
+  becomes the authority for the config it names. This is a fallback, not a
+  parallel default — ops only originates naming for what feasibility could
+  not have foreseen.
+- Whichever record does the naming, the other role's DEPENDS-ON reading of
+  it (section 4) is unchanged: this section assigns naming authority, it
+  does not add a new DEPENDS-ON edge.
