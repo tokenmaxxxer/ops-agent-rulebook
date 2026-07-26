@@ -4,13 +4,14 @@ status: final
 
 # Role handoff contract (v2: blackboard/event model)
 
-Authority document for how the six role rulebooks — coding, qa, feasibility,
-product, ops, review — coordinate inside the target repository each is
-working on. v1 modeled coordination as one-shot parcel handoffs between
-adjacent roles; v2 replaces that with a shared blackboard each role reads,
-writes its own record onto, and wakes from. This document defines the shared
-record format; it does not itself change any of the six rulebooks. Landing
-this contract in each rulebook is separate, one proposal per repo.
+Authority document for how the seven role rulebooks — coding, qa,
+feasibility, product, ops, review, verify — coordinate inside the target
+repository each is working on. v1 modeled coordination as one-shot parcel
+handoffs between adjacent roles; v2 replaces that with a shared blackboard
+each role reads, writes its own record onto, and wakes from. This document
+defines the shared record format; it does not itself change any of the
+seven rulebooks. Landing this contract in each rulebook is separate, one
+proposal per repo.
 
 ## 1. Common header
 
@@ -21,7 +22,7 @@ role-specific fields section 2 requires:
 kind: <artifact kind string, see section 2>
 subject: <stable identifier for the piece of work, shared by every role
           touching it>
-produced_by: coding | qa | feasibility | product | ops | review
+produced_by: coding | qa | feasibility | product | ops | review | verify
 upstream:
   - path: <repo-root-relative path>
     sha: <commit SHA the artifact was read at>
@@ -49,7 +50,7 @@ loop_state: <this role's own state-machine position; see section 2's
 
 Every role writes exactly one status record onto the blackboard,
 `docs/reports/records/<subject>/<role>.md`, plus zero or more per-item
-sub-artifacts. All six roles are sanctioned here, including product's and
+sub-artifacts. All seven roles are sanctioned here, including product's and
 coding's records, closing the trial's two unsanctioned-kind gaps.
 
 | kind | produced by | path | `loop_state` vocabulary | required fields beyond common header |
@@ -64,6 +65,7 @@ coding's records, closing the trial's two unsanctioned-kind gaps.
 | `feasibility-record` | feasibility | `docs/reports/records/<subject>/feasibility.md` | `idle,scoped,probing,verdict` | `market_argument_supplied: false`, `technical`/`prior_art`/`legal_regulatory`/`threat_model` (each `unresolved\|pass:<evidence>\|fail:<evidence>\|blocked:<evidence>`), `verdict: go\|no-go\|conditional` (required once `loop_state` reaches `verdict`), `measurement_design: <description or pointer>` |
 | `spike-report` | feasibility | `docs/reports/records/<subject>/spikes/<spike-slug>.md` | n/a (closed report) | Spike Title, Description/Goal, Type, Timebox, Acceptance Criteria, Tasks, Outcomes, Recommendation, Open questions, Reversibility tag; fixture-N notation if fixtures are involved (records the fixture count it was authored against, so a downstream re-run can detect additions/removals) |
 | `review-record` | review | `docs/reports/records/<subject>/review.md` | `idle,scoped,auditing,draft-reported,reported` | — |
+| `verify-record` | verify | `docs/reports/records/<subject>/verify.md` | `idle,reproducing,reproduced,cleared` | what was attempted, what reproduced (if anything), reproduction evidence (repro steps, commit sha, run output) |
 | `finding` | any role | inline block within the addressing role's own record | n/a | `requirement`, `verdict` (`Present\|Surface\|Absent\|Incorrect\|Unverifiable`), `evidence`, `rationale`, `spec_vs_built` (required only when `verdict: Incorrect`), `addressed_to: <role>`, `severity: blocking\|advisory` — see item 4 |
 | `ops-record` | ops | `docs/reports/records/<subject>/ops.md` | `idle,readiness,rollout,steady,incident` | `error_budget: ok\|exhausted`, `postmortem: <pointer>`, `## Checklist` (`- item: <desc> \| status: yes\|no \| artifact: <url/path/config key>`) |
 | `postmortem` | ops | `docs/reports/records/<subject>/postmortems/<incident-slug>.md` | n/a (closed report) | Impact, Actions taken during response, Root cause(s), Prevention follow-up (owner+tracking+closing-condition), Review (named human reviewer) |
@@ -89,6 +91,7 @@ the model's parallelism comes from, not an edge case.
 | review | any commit landed by coding |
 | product | a qa or review outcome whose content questions the standing acceptance criteria |
 | ops | a change landed (merged) that is ready to roll out |
+| verify | coding and qa have both produced artifacts for a subject (first wake); again before landing, as a pre-land gate (second wake) |
 
 **Who evaluates these rows.** No automated watcher exists yet in this
 operating model. The human's session opens a role's rulebook when the board
@@ -130,6 +133,19 @@ different concerns (see qa row below).
     it alone is not.
   - ops depends on `build-proposal` (what merged) and `hypothesis` /
     `feasibility-record` (the measurement design).
+  - verify depends on `coding-record`, `qa-record`, and `review-record` — it
+    reads what was built, what qa already tried, and what review concluded,
+    then goes looking for what none of them caught. It emits `finding`
+    blocks per section 5, `addressed_to: coding`, with `severity: blocking`
+    or `advisory`. A `verify` finding with `severity: blocking` is not
+    overridden by a `review-record` in `loop_state: reported` with a clean
+    verdict — review's and verify's verdicts are independent, and verify's
+    blocking findings gate landing on their own terms, per this section's
+    unchanged NEVER-OVERWRITE / ownership rule. `verify`'s contract entry
+    enforces structure only — that a verify record exists, its WAKES-ON
+    edges, and a blocking-finding channel back to coding — and does not
+    dictate what counts as a defect; deciding what is a real defect is
+    verify's own judgment.
 - **NEVER OVERWRITE (unchanged from v1 §7).** Per-role write ownership
   (section 7 below) carries over without change. READ/DEPENDS-ON add
   semantics on top of an unchanged ownership rule; they do not loosen it.
@@ -172,6 +188,12 @@ generalized from v1, where only review produced findings, to all six roles.
   wake that reproduces an *already-filed, unresolved* finding without
   adding new information is not a new board change either, and does not
   re-open the cycle. This is the rule that keeps qa↔coding ping-pong finite.
+- **verify↔coding cycle termination.** Extends the above to verify: a
+  `verify` wake is not a valid consumption unless it produces either a
+  `cleared` `loop_state` (no unresolved reproduced findings) or a
+  new/re-affirmed `finding`. A blocking finding resolves only when coding's
+  `finding-response` supplies fix evidence that verify re-observes, or the
+  human explicitly waives it under section 8's human-judgment seat.
 
 ## 7. `loop_state` authority
 
@@ -254,6 +276,7 @@ seventh bucket to fit it.
 | feasibility | `docs/reports/records/<subject>/feasibility.md`, `docs/reports/records/<subject>/spikes/<spike-slug>.md` |
 | review | `docs/reports/records/<subject>/review.md` (including inline `finding` blocks) |
 | ops | `docs/reports/records/<subject>/ops.md`, `docs/reports/records/<subject>/postmortems/<incident-slug>.md` |
+| verify | `docs/reports/records/<subject>/verify.md` (including inline `finding` blocks) |
 
 A role finding an existing record already present at a path section 11
 assigns to a different role must refuse to write there and report the
