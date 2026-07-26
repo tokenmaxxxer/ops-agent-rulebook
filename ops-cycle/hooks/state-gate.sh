@@ -92,9 +92,11 @@ if not isinstance(event, dict):
 tool = event.get("tool_name")
 tool_input = event.get("tool_input")
 if not isinstance(tool_input, dict):
-    # No tool input at all (e.g. a read-only or unrelated event) — nothing
-    # to judge a write against.
-    allow()
+    # Malformed/absent tool_input: this gate cannot establish what the
+    # event is even asking, so it FAILS CLOSED — never allow() on input it
+    # cannot understand. Matches the five sibling gates and this header's
+    # own stated fail-closed behavior.
+    deny_rules_unloaded("tool_input is missing or not a JSON object; the gate cannot judge a write it cannot parse")
 
 root = os.environ["OPS_ROOT"]
 root = posixpath.normpath(root.replace("\\", "/"))
@@ -160,6 +162,50 @@ def bash_write_targets(command):
             stripped = raw.strip("'\"")
             targets.append((raw, stripped))
     return targets
+
+# --- §11 subject-scoped owned-path check -------------------------------
+# Under contract-v2 the blackboard lives at
+# docs/reports/records/<subject>/<role>.md. This role (ops) owns only its
+# own <subject>/ops.md file; writing another role's file under the same
+# subject is refused, citing §11 — mirroring the qa/product gates' shape.
+RECORDS_RE = re.compile(r'^docs/reports/records/([^/]+)/([^/]+\.md)$')
+OWN_ROLE_FILE = "ops.md"
+
+def check_owned_path(path_str):
+    resolved = resolve(path_str)
+    if not (resolved == root or resolved.startswith(root + "/")):
+        return
+    rel = resolved[len(root):].lstrip("/")
+    m = RECORDS_RE.match(rel)
+    if not m:
+        return
+    subject, role_file = m.group(1), m.group(2)
+    if role_file != OWN_ROLE_FILE:
+        deny(
+            "this write targets %s, which under docs/reports/records/<subject>/ is "
+            "another role's owned record file (ops owns only <subject>/%s). §11 "
+            "subject-scoped ownership forbids one role writing another role's file."
+            % (rel, OWN_ROLE_FILE)
+        )
+
+def owned_path_write_targets():
+    targets = []
+    if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+        path = tool_input.get("file_path") or tool_input.get("notebook_path")
+        if isinstance(path, str) and path:
+            targets.append(path)
+    elif tool == "Bash":
+        command = tool_input.get("command")
+        if isinstance(command, str) and command.strip():
+            for raw, stripped in bash_write_targets(command):
+                if raw.startswith("-"):
+                    continue
+                if is_literal(stripped):
+                    targets.append(stripped)
+    return targets
+
+for _owned_target in owned_path_write_targets():
+    check_owned_path(_owned_target)
 
 def touches_state_file():
     if tool in ("Write", "Edit", "MultiEdit", "NotebookEdit"):

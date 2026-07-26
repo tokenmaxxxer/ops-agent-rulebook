@@ -121,6 +121,28 @@ else
   fail=$((fail+1))
 fi
 
+# (m) ops writing its own subject-scoped record -> ALLOW
+run_case "own-record-write" 0 \
+$'---\nstatus: idle\n---\n' \
+'{"tool_name":"Write","tool_input":{"file_path":"docs/reports/records/gate-fix/ops.md","content":"notes"}}'
+
+# (n) ops attempting to write another role's subject-scoped record under the
+# same subject -> DENY, citing §11
+run_case "foreign-record-write" 2 \
+$'---\nstatus: idle\n---\n' \
+'{"tool_name":"Write","tool_input":{"file_path":"docs/reports/records/gate-fix/qa.md","content":"notes"}}'
+
+# (o) empty/malformed stdin -> DENY, never silent exit 0
+empty_out="$(printf '' | CLAUDE_PROJECT_DIR="$tmp_root" bash "$gate" 2>&1)"
+empty_exit=$?
+if [ "$empty_exit" -ne 0 ]; then
+  echo "PASS: empty-stdin (exit $empty_exit)"
+  pass=$((pass+1))
+else
+  echo "FAIL: empty-stdin (expected non-zero exit, got $empty_exit) output: $empty_out"
+  fail=$((fail+1))
+fi
+
 echo
 echo "Results: $pass passed, $fail failed"
 if [ "$fail" -ne 0 ]; then
