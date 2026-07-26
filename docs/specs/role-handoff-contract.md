@@ -4,13 +4,13 @@ status: final
 
 # Role handoff contract (v2: blackboard/event model)
 
-Authority document for how the eight role rulebooks — coding, qa,
-feasibility, product, ux-design, ops, review, verify — coordinate inside the
+Authority document for how the nine role rulebooks — coding, qa,
+feasibility, product, ux-design, ops, review, verify, reflect — coordinate inside the
 target repository each is working on. v1 modeled coordination as one-shot
 parcel handoffs between adjacent roles; v2 replaces that with a shared
 blackboard each role reads, writes its own record onto, and wakes from. This
 document defines the shared record format; it does not itself change any of
-the eight rulebooks. Landing this contract in each rulebook is separate,
+the nine rulebooks. Landing this contract in each rulebook is separate,
 one proposal per repo.
 
 ## 1. Common header
@@ -22,7 +22,7 @@ role-specific fields section 2 requires:
 kind: <artifact kind string, see section 2>
 subject: <stable identifier for the piece of work, shared by every role
           touching it>
-produced_by: coding | qa | feasibility | product | ux-design | ops | review | verify
+produced_by: coding | qa | feasibility | product | ux-design | ops | review | verify | reflect
 upstream:
   - path: <repo-root-relative path>
     sha: <commit SHA the artifact was read at>
@@ -50,7 +50,7 @@ loop_state: <this role's own state-machine position; see section 2's
 
 Every role writes exactly one status record onto the blackboard,
 `docs/reports/records/<subject>/<role>.md`, plus zero or more per-item
-sub-artifacts. All eight roles are sanctioned here, including product's and
+sub-artifacts. All nine roles are sanctioned here, including product's and
 coding's records, closing the trial's two unsanctioned-kind gaps.
 
 | kind | produced by | path | `loop_state` vocabulary | required fields beyond common header |
@@ -70,6 +70,7 @@ coding's records, closing the trial's two unsanctioned-kind gaps.
 | `finding` | any role | inline block within the addressing role's own record | n/a | `requirement`, `verdict` (`Present\|Surface\|Absent\|Incorrect\|Unverifiable`), `evidence`, `rationale`, `spec_vs_built` (required only when `verdict: Incorrect`), `addressed_to: <role>`, `severity: blocking\|advisory` — see item 4 |
 | `ops-record` | ops | `docs/reports/records/<subject>/ops.md` | `idle,readiness,rollout,steady,incident` | `error_budget: ok\|exhausted`, `postmortem: <pointer>`, `## Checklist` (`- item: <desc> \| status: yes\|no \| artifact: <url/path/config key>`) |
 | `postmortem` | ops | `docs/reports/records/<subject>/postmortems/<incident-slug>.md` | n/a (closed report) | Impact, Actions taken during response, Root cause(s), Prevention follow-up (owner+tracking+closing-condition), Review (named human reviewer) |
+| `reflect-record` | reflect | `docs/reports/records/<subject>/reflect.md` | `idle,reflecting,done` | pointer to the subject's other role records read; what went well, what failed, what pattern should change next time |
 
 `kind` parsing by any gate must tolerate a trailing comment on the line
 (`kind: build-proposal  # re-scoped`); a regex anchored to end-of-line with
@@ -94,6 +95,7 @@ the model's parallelism comes from, not an edge case.
 | product | a qa or review outcome whose content questions the standing acceptance criteria |
 | ops | a change landed (merged) that is ready to roll out |
 | verify | coding and qa have both produced artifacts for a subject (first wake); again before landing, as a pre-land gate (second wake) |
+| reflect | a subject's work has landed and verify and/or review have concluded (a `verify-record` reaching `cleared`, or a `review-record` reaching `reported`) |
 
 **Who evaluates these rows.** No automated watcher exists yet in this
 operating model. The human's session opens a role's rulebook when the board
@@ -154,6 +156,14 @@ different concerns (see qa row below).
     edges, and a blocking-finding channel back to coding — and does not
     dictate what counts as a defect; deciding what is a real defect is
     verify's own judgment.
+  - reflect depends on the subject's other role records (`coding-record`,
+    `qa-record`, `review-record`, `verify-record`, and any others present)
+    and any `finding` blocks addressed to or from them — the retrospective
+    material it reads to produce its retro. `reflect`'s contract entry
+    enforces structure only — that a `reflect-record` exists per subject,
+    its WAKES-ON edge after verify/review conclude, and that it may emit
+    `finding` back-edges at `severity: advisory` — and does not dictate
+    what the retro concludes; that judgment is reflect's own.
 - **NEVER OVERWRITE (unchanged from v1 §7).** Per-role write ownership
   (section 7 below) carries over without change. READ/DEPENDS-ON add
   semantics on top of an unchanged ownership rule; they do not loosen it.
@@ -161,7 +171,7 @@ different concerns (see qa row below).
 ## 5. The finding back-edge
 
 Any role may post a `finding` addressed to any owning role via the board —
-generalized from v1, where only review produced findings, to all eight roles.
+generalized from v1, where only review produced findings, to all nine roles.
 
 - `addressed_to: <role>` names the role that owns the fix.
 - `severity: blocking | advisory`. `blocking` means loops that DEPEND ON the
@@ -286,6 +296,7 @@ seventh bucket to fit it.
 | review | `docs/reports/records/<subject>/review.md` (including inline `finding` blocks) |
 | ops | `docs/reports/records/<subject>/ops.md`, `docs/reports/records/<subject>/postmortems/<incident-slug>.md` |
 | verify | `docs/reports/records/<subject>/verify.md` (including inline `finding` blocks) |
+| reflect | `docs/reports/records/<subject>/reflect.md` (including inline `finding` blocks) |
 
 A role finding an existing record already present at a path section 11
 assigns to a different role must refuse to write there and report the
