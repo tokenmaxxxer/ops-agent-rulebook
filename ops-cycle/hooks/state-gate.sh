@@ -47,25 +47,64 @@ payload="$(cat 2>/dev/null || true)"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
-# Root is the repository being worked in: CLAUDE_PROJECT_DIR when the harness
-# sets it, otherwise the process cwd, anchored on that directory's git root so
-# an invocation from a subdirectory still resolves to the project root.
-#
-# It is deliberately NOT the nearest `.git` above this hook's own location.
-# That coincides with the project only while the rulebook is vendored into it.
-# Loaded as a plugin from its own checkout — which is how an orchestrator
-# swaps rulebooks per role — it resolves to the RULEBOOK's repo, and the gate
-# then guards a repository nobody is working in: every write in the real
-# project falls outside its owned paths, so it allows all of them and says
-# nothing. Measured 2026-07-26: a state jump skipping an intermediate state
-# was permitted with exit 0.
-root="${CLAUDE_PROJECT_DIR:-$PWD}"
-if top="$(git -C "$root" rev-parse --show-toplevel 2>/dev/null)" && [ -n "$top" ]; then
-  root="$top"
+# Root resolution (frozen contract:
+# docs/proposals/2026-07-26-gate-root-from-project-dir.md): candidate root =
+# CLAUDE_PROJECT_DIR when set, but only trusted once validated — (a) the
+# tool call's actual target resolves inside it, and (b) it looks like a real
+# project root (git work-tree top-level, or docs/specs/role-handoff-contract.md
+# present). An unset or invalid candidate falls back to the git top-level of
+# the tool call's target path, then the git top-level of cwd. A root that
+# remains indeterminate is refused outright — never silently allowed,
+# including for writes into the owned record tree.
+_gate_target="$(printf '%s' "$payload" | python3 -c '
+import json, sys
+try:
+    e = json.loads(sys.stdin.read())
+except Exception:
+    sys.exit(0)
+ti = e.get("tool_input") if isinstance(e, dict) else None
+if isinstance(ti, dict):
+    fp = ti.get("file_path")
+    if isinstance(fp, str) and fp:
+        print(fp)
+' 2>/dev/null || true)"
+
+_gate_is_plausible_root() {
+  [ -n "$1" ] && [ -d "$1" ] && { [ -e "$1/.git" ] || [ -f "$1/docs/specs/role-handoff-contract.md" ]; }
+}
+
+_gate_target_under_root() {
+  [ -z "$2" ] && return 0
+  python3 -c '
+import os, posixpath, sys
+root, target = sys.argv[1], sys.argv[2]
+try:
+    root_real = posixpath.normpath(os.path.realpath(root).replace("\\", "/"))
+except Exception:
+    sys.exit(1)
+norm = target.replace("\\", "/")
+absu = norm if posixpath.isabs(norm) else posixpath.join(root_real, norm)
+absu = posixpath.normpath(absu)
+real = posixpath.normpath(os.path.realpath(absu).replace("\\", "/"))
+sys.exit(0 if (real == root_real or real.startswith(root_real + "/")) else 1)
+' "$1" "$2"
+}
+
+root=""
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && _gate_is_plausible_root "$CLAUDE_PROJECT_DIR" && _gate_target_under_root "$CLAUDE_PROJECT_DIR" "$_gate_target"; then
+  root="$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P)"
 fi
-root="$(cd "$root" 2>/dev/null && pwd -P)" || root=""
 if [ -z "$root" ]; then
-  echo "ops-cycle: refused — the transition rules could not be loaded (could not resolve the project root being worked in); no transition may be made until this is fixed." >&2
+  _gate_fallback_dir="$_gate_target"
+  [ -n "$_gate_fallback_dir" ] || _gate_fallback_dir="$(pwd -P)"
+  [ -d "$_gate_fallback_dir" ] || _gate_fallback_dir="$(dirname "$_gate_fallback_dir")"
+  root="$(git -C "$_gate_fallback_dir" rev-parse --show-toplevel 2>/dev/null || true)"
+fi
+if [ -z "$root" ]; then
+  root="$(git -C "$(pwd -P)" rev-parse --show-toplevel 2>/dev/null || true)"
+fi
+if [ -z "$root" ]; then
+  echo "ops-cycle: refused — no project root could be determined (CLAUDE_PROJECT_DIR unset or failed validation, and no git top-level found for the tool call's target or for cwd); no transition may be made until this is fixed." >&2
   exit 2
 fi
 

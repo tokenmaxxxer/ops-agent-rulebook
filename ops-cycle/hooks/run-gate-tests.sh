@@ -127,29 +127,74 @@ run_case "genuinely-absent-bootstrap-allowed" 0 \
 "" \
 '{"tool_name":"Write","tool_input":{"file_path":"ops/state.md","content":"---\nstatus: idle\n---\n"}}'
 
-# (l) the gate follows the project, not its own location ------------------
-# Where this hook sits on disk must not decide what it guards. Copy the whole
-# hooks directory somewhere outside any project, run that copy with the
-# project as cwd, and it must reach the same decision as the in-repo copy.
-#
-# Until 2026-07-26 root was the nearest `.git` ABOVE the hook itself. A
-# rulebook loaded as a plugin from its own checkout — which is how an
-# orchestrator swaps rulebooks per role — therefore guarded the rulebook's
-# repo, and every write in the real project fell outside its owned paths and
-# was allowed, silently, exit 0.
-elsewhere="$(mktemp -d)"
-cp -R "$script_dir" "$elsewhere/hooks"
+# (l) CLAUDE_PROJECT_DIR unset: git-toplevel fallback ---------------------
+# Per docs/proposals/2026-07-26-gate-root-from-project-dir.md §2(b): with
+# CLAUDE_PROJECT_DIR unset, root falls back to the git top-level of the
+# PreToolUse target path, else the git top-level of cwd.
+outside_dir="$(mktemp -d)"
 payload_l='{"tool_name":"Write","tool_input":{"file_path":"ops/state.md","content":"---\nstatus: idle\n---\n"}}'
 out_in="$(cd "$repo_root" && env -u CLAUDE_PROJECT_DIR bash -c 'printf "%s" "$1" | "$2"' _ "$payload_l" "$gate" 2>&1)"
 code_in=$?
-out_out="$(cd "$repo_root" && env -u CLAUDE_PROJECT_DIR bash -c 'printf "%s" "$1" | bash "$2"' _ "$payload_l" "$elsewhere/hooks/state-gate.sh" 2>&1)"
-code_out=$?
-rm -rf "$elsewhere"
-if [ "$code_in" -eq "$code_out" ]; then
-  echo "PASS: gate-location-independence (out-of-tree copy exit $code_out matches in-repo exit $code_in)"
+if [ "$code_in" -eq 0 ]; then
+  echo "PASS: inside-repo-cwd-fallback (exit 0)"
   pass=$((pass+1))
 else
-  echo "FAIL: gate-location-independence (in-repo exit $code_in, out-of-tree exit $code_out) — out: $out_out | in: $out_in"
+  echo "FAIL: inside-repo-cwd-fallback (expected exit 0 via git-toplevel fallback, got $code_in) — $out_in"
+  fail=$((fail+1))
+fi
+
+# (l2) CLAUDE_PROJECT_DIR unset, cwd AND target both outside any git
+# work-tree -> root is indeterminate -> refused (never silently allowed).
+out_out="$(cd "$outside_dir" && env -u CLAUDE_PROJECT_DIR bash -c 'printf "%s" "$1" | "$2"' _ "$payload_l" "$gate" 2>&1)"
+code_out=$?
+rm -rf "$outside_dir"
+if [ "$code_out" -ne 0 ]; then
+  echo "PASS: outside-repo-indeterminate-root-refused (exit $code_out)"
+  pass=$((pass+1))
+else
+  echo "FAIL: outside-repo-indeterminate-root-refused (expected refused, got exit 0) — $out_out"
+  fail=$((fail+1))
+fi
+
+# --- (q) target-repo-governance: CLAUDE_PROJECT_DIR pointed at an
+# unrelated, empty (but plausible-looking, git-initialized) directory, and
+# the Write targets an owned-tree path that is ALSO not inside any git
+# work-tree -> root is genuinely indeterminate -> default-deny per §2(c),
+# not silently allowed.
+unrelated_dir="$(mktemp -d)"
+git init -q "$unrelated_dir" >/dev/null 2>&1
+non_git_target_dir="$(mktemp -d)"
+scratch_subject_q="gateroot-unrelated-projectdir-test"
+mkdir -p "$non_git_target_dir/docs/reports/records/$scratch_subject_q"
+payload_q="{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$non_git_target_dir/docs/reports/records/$scratch_subject_q/ops.md\",\"content\":\"notes\"}}"
+out_q="$(cd "$non_git_target_dir" && env CLAUDE_PROJECT_DIR="$unrelated_dir" bash -c 'printf "%s" "$1" | "$2"' _ "$payload_q" "$gate" 2>&1)"
+rc_q=$?
+rm -rf "$unrelated_dir" "$non_git_target_dir"
+if [ "$rc_q" -ne 0 ]; then
+  echo "PASS: unrelated-project-dir-indeterminate-owned-tree-refused (exit $rc_q)"
+  pass=$((pass+1))
+else
+  echo "FAIL: unrelated-project-dir-indeterminate-owned-tree-refused (expected refused, got exit 0) — $out_q"
+  fail=$((fail+1))
+fi
+
+# --- (r) target-repo-governance: CLAUDE_PROJECT_DIR correctly set (target
+# is under it, and it looks like a project root) -> §11 enforced normally
+# against that SEPARATE target project, not against this rulebook repo.
+target_repo_r="$(mktemp -d)"
+git init -q "$target_repo_r" >/dev/null 2>&1
+mkdir -p "$target_repo_r/docs/specs" "$target_repo_r/docs/reports/records/checkout-flow"
+printf '# role-handoff-contract\n\n## 11. NEVER-OVERWRITE\n\nA role owns exactly its own docs/reports/records/<subject>/<role>.md slot.\n' \
+  > "$target_repo_r/docs/specs/role-handoff-contract.md"
+payload_r="{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$target_repo_r/docs/reports/records/checkout-flow/qa.md\",\"content\":\"notes\"}}"
+out_r="$(CLAUDE_PROJECT_DIR="$target_repo_r" bash "$gate" <<<"$payload_r" 2>&1)"
+rc_r=$?
+rm -rf "$target_repo_r"
+if [ "$rc_r" -ne 0 ]; then
+  echo "PASS: valid-project-dir-separate-target-project-foreign-record-refused (exit $rc_r)"
+  pass=$((pass+1))
+else
+  echo "FAIL: valid-project-dir-separate-target-project-foreign-record-refused (expected refused, got exit 0) — $out_r"
   fail=$((fail+1))
 fi
 
