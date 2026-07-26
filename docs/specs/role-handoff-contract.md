@@ -354,6 +354,9 @@ This is deliberately different from this section's other grants, which are
 single-author write-once; a handbook is a living current-state doc that
 must track whichever role most recently touched the component's
 operational surface, per section 21's write-time maintenance rule.
+`<component>` itself is derived, not chosen, and creating a new handbook
+file requires a search for an existing one first — see section 21's
+"Deriving `<component>`" and "Search before write" paragraphs.
 
 **Carried over, unenforced (v1 §7's flagged tension).** warrant's
 `scope-gate.sh` allows any write under `docs/` unconditionally, regardless
@@ -668,6 +671,28 @@ grants the ownership it requires:
   `docs/handbooks/<component>.md`: what it is, what it defaults to, what
   breaks without it, and the concrete commands to install, run, and operate
   the deliverable (not only how to test it).
+
+  **Deriving `<component>`.** Mirroring section 9's `subject` derivation,
+  `<component>` is not asked-for but derived, deterministically, from the
+  artifact being changed: it is the name of the module, service, or
+  config-area that owns the operational surface being touched — e.g. the
+  directory or package containing the env var's consuming code, the
+  dependency's declaring manifest (service directory for a per-service
+  manifest, repo root for a repo-wide one), the migration's target
+  service/database, or the run/setup/deploy step's script or workflow
+  directory. Use that owning directory's own name (its `package.json`/
+  `pyproject.toml` name field, or failing that its directory basename) as
+  the slug, lowercased and hyphenated. Because the slug is read off the
+  surface's owning location rather than chosen by the role, two roles
+  independently changing the same logical surface derive the same slug.
+
+  **Search before write.** Before creating `docs/handbooks/<component>.md`,
+  a role must search `docs/handbooks/*` for a handbook already filed under
+  the derived `<component>` slug (or an evident naming variant of it) and,
+  if found, update that existing file in place rather than creating a new
+  one — mirroring section 9's search-before-mint discipline for `subject`.
+  Skipping this search is what would split one component's operational
+  surface into multiple never-converging handbook files.
 
   A handbook is a living current-state doc, not a write-once record, so
   section 11's "Section 21 grant" single-author ownership does not apply to
