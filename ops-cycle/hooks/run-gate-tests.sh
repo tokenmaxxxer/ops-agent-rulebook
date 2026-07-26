@@ -290,6 +290,32 @@ run_case "crash-null-byte-in-file-path-denies-2" 2 \
 $'---\nstatus: idle\n---\n' \
 '{"tool_name":"Write","tool_input":{"file_path":"ops/\u0000state.md","content":"---\nstatus: idle\n---\n"}}'
 
+# --- fail-closed-trap-at-top (docs/proposals/2026-07-26-gates-fail-closed-trap-at-top.md)
+# A gate that aborts BEFORE its verdict logic runs (a failed `source`, a
+# `set -euo pipefail` abort, an unbound var, a syntax path) previously exited
+# non-2, which PreToolUse treats as NON-BLOCKING (fail-OPEN). The trap-at-top
+# installed as the first executable statement must convert any such abnormal
+# exit (rc not in {0,2}) into DENY (exit 2).
+#
+# (t) pre-logic abort: a copy of the real gate with a guaranteed early command
+# failure injected immediately after its `set -euo pipefail` (i.e. BEFORE any
+# verdict logic) — under set -e this aborts with rc=1, exactly the class a
+# missing/unreadable sourced file would produce — MUST be forced to exit 2 by
+# the top-installed EXIT trap, not leak the raw rc.
+trap_gate="$tmp_root/state-gate-prelogic-abort.sh"
+awk '{print} /^set -euo pipefail/ && !done {print "false  # injected pre-logic abort (simulates failed source / early error)"; done=1}' \
+  "$gate" > "$trap_gate"
+chmod +x "$trap_gate"
+prelogic_out="$(printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"ops/state.md","content":"---\nstatus: idle\n---\n"}}' | bash "$trap_gate" 2>&1)"
+prelogic_exit=$?
+if [ "$prelogic_exit" -eq 2 ]; then
+  echo "PASS: prelogic-abort-forced-to-deny-2 (exit $prelogic_exit)"
+  pass=$((pass+1))
+else
+  echo "FAIL: prelogic-abort-forced-to-deny-2 (expected exit 2, got $prelogic_exit) — $prelogic_out"
+  fail=$((fail+1))
+fi
+
 echo
 echo "Results: $pass passed, $fail failed"
 if [ "$fail" -ne 0 ]; then

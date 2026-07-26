@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# fail-closed trap: any abort with rc not in {0,2} is forced to DENY (exit 2).
+__fc(){ rc=$?; if [ "$rc" != 0 ] && [ "$rc" != 2 ]; then echo "fail-closed: gate aborted (rc=$rc)" >&2; exit 2; fi; }
+trap __fc EXIT
 # PreToolUse hook (Bash matching 'git commit'): enforces contract §13's commit
 # trailer requirement for the ops role. When a unit is in progress for ops --
 # i.e. some ops record (docs/reports/records/<subject>/ops.md) carries a
