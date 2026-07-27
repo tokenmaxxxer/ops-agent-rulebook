@@ -610,6 +610,30 @@ WAKES-ON.
   `scope-approved` — a fix for a finding, a qa regression, a ux-design
   revision — proceeds under the existing rows in section 3 without
   re-clearing this gate.
+- **How a human approves, mechanically.** The approval is an exact line the
+  human types in their own session — `APPROVE <kind> <subject>` — which
+  mints a single-use token a gate then consumes. Two properties are
+  load-bearing and neither may be relaxed. The whole turn must equal that
+  line: three earlier designs read approval out of prose and all three
+  leaked, because deciding what a sentence means is a language problem and
+  a regex is the wrong tool for it. And the turn must be the human's own: a
+  session spawned by an orchestrator receives its task as a prompt, so an
+  orchestrator-authored turn is never an approval and the mint refuses
+  under the orchestrator's stamp. A role asks by printing the exact line;
+  it never relays one.
+- **Unattended runs.** A run with no human present does not skip this gate
+  and does not let the working role decide. Either it stops for a human, or
+  an independent session — spawned by the orchestrator between role
+  sessions, given no task context, no tools, and the mechanical git facts
+  alongside the recorded material — returns `APPROVE`, `REFUSE`, or `HOLD`,
+  and only a clean `APPROVE` mints a token marked `actor: judge`. `HOLD` is
+  the correct answer whenever it cannot tell, and is not a failure. A gate
+  accepts a judge's token only while its own session is unattended, so an
+  approval minted in an unattended run can never satisfy an attended gate
+  later. **The four decisions section 8 reserves for the human's seat —
+  scope approval among them — are never delegated to a judge.** Unattended
+  mode is set by the human or by the orchestrator on the human's behalf; an
+  agent cannot set it from inside its own session.
 
 ## 20. Per-role record minimum content
 
