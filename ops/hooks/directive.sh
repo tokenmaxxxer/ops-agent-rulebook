@@ -46,6 +46,16 @@ EXECUTION JUDGMENT (phase 2, quality bar):
   inconclusive holds, it does not advance.
 - Postmortems live at docs/issue-<n>/reports/postmortems/<slug>.md
   (a core R5 grant).
+
+YOUR RECORD IS THE BOARD (do not skip this): WAKES-ON reads
+docs/issue-<n>/reports/ops.md ONLY — research files, surveys, and
+proposals wake no one. The record is execution-surface material, so:
+write it as your FIRST act of phase 2, and update its loop_state at
+every transition. Ending phase 2 without your record committed on the
+branch means the board never saw your work and no downstream role can
+ever be woken by it. (Measured: a phase-1-only issue left the board
+empty and machine wake-up dead.)
+
 DIRECTIVE
 
 trap - EXIT
