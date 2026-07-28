@@ -1,0 +1,7 @@
+{
+  "name": "ops",
+  "description": "The ops role on contract v3: may it ship, does it keep running \u2014 readiness gated by pointable artifacts (a yes with nothing to link is a FAIL), pre-declared rollout thresholds, error-budget refusal, human-reviewed postmortems. Ships skills: readiness-checklist, rollout-plan, error-budget-policy, postmortem.",
+  "author": {
+    "name": "Jung Jiwon & Lee Jongkwan"
+  }
+}

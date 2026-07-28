@@ -5,14 +5,9 @@
   },
   "plugins": [
     {
-      "name": "ops-cycle",
-      "source": "./ops-cycle",
-      "description": "The ops role's state machine: idle -> readiness -> rollout -> steady -> incident. A UserPromptSubmit hook mints an approval token only from the user's own turn; a PreToolUse gate refuses readiness -> rollout without every checklist item resolved to yes/no with a pointable artifact, refuses rollout -> steady without a matching approval token, and mechanically refuses any release transition out of steady once the error budget is recorded exhausted."
-    },
-    {
-      "name": "ops-agent-env",
-      "source": "./ops-agent-env",
-      "description": "One-install environment bundle for the ops role: installs ops-cycle via dependency. Contains no code of its own."
+      "name": "ops",
+      "source": "./ops",
+      "description": "The ops role on contract v3: may it ship, does it keep running \u2014 readiness gated by pointable artifacts (a yes with nothing to link is a FAIL), pre-declared rollout thresholds, error-budget refusal, human-reviewed postmortems. Ships skills: readiness-checklist, rollout-plan, error-budget-policy, postmortem."
     }
   ]
 }

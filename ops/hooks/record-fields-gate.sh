@@ -4,7 +4,7 @@ __fc(){ rc=$?; if [ "$rc" != 0 ] && [ "$rc" != 2 ]; then echo "fail-closed: gate
 trap __fc EXIT
 # PreToolUse hook (Write|Edit|MultiEdit|NotebookEdit): enforces contract §20's
 # per-role record minimum content on writes reaching THIS role's own record,
-# docs/reports/records/<subject>/ops.md.
+# docs/issue-<n>/reports/ops.md.
 #
 # This is a peer check to state-gate.sh, NOT a replacement: state-gate.sh
 # validates the ops/state.md transition table; this gate validates that the
@@ -106,7 +106,7 @@ if not (resolved == root or resolved.startswith(root + "/")):
     allow()
 rel = resolved[len(root):].lstrip("/")
 
-RECORD_RE = re.compile(r'^docs/reports/records/([^/]+)/ops\.md$')
+RECORD_RE = re.compile(r'^docs/issue-[0-9]+/reports/ops\.md$')
 if not RECORD_RE.match(rel):
     allow()
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-shot installer for the tokenmaxxxer ops stack.
 # Registers ONLY the tokenmaxxxer-ops marketplace, installs ONLY this
-# repository's plugins (ops-cycle) plus its bundle (ops-agent-env), at
+# repository's plugins (ops) plus its bundle (ops), at
 # user scope. Names no other repository or marketplace.
 #
 # Installs for your account only (user scope). Uses a real `claude` CLI
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 MARKET="tokenmaxxxer-ops"
-BUNDLE="ops-agent-env"
+BUNDLE="ops"
 GITHUB_REPO="tokenmaxxxer/ops-agent-rulebook"
 
 usage() {
@@ -129,14 +129,14 @@ if [ -n "$CLI" ] && [ -x "$CLI" ]; then
   # installs are idempotent and make "re-run the installer" the fix for
   # every dependency error.
   install_failed=""
-  for plugin in ops-cycle; do
+  for plugin in ops; do
     "$CLI" plugin install "$plugin@$MARKET" --scope user || install_failed="$install_failed $plugin"
   done
   "$CLI" plugin install "$BUNDLE@$MARKET" --scope user || install_failed="$install_failed $BUNDLE"
   # Then update each to the marketplace's latest. `install` on an already-present
   # plugin may no-op, so after the marketplace refresh an explicit `update` is
   # what actually pulls a newer version.
-  for plugin in ops-cycle; do
+  for plugin in ops; do
     "$CLI" plugin update "$plugin@$MARKET" || true
   done
   "$CLI" plugin update "$BUNDLE@$MARKET" || true
@@ -166,5 +166,5 @@ cat <<'MSG'
       auto-update, so future stack additions arrive automatically. There is
       no CLI/config switch for this toggle; it is a one-time interactive step.
     - without auto-update, refresh manually anytime:
-      claude plugin update ops-agent-env@tokenmaxxxer-ops
+      claude plugin update ops@tokenmaxxxer-ops
 MSG

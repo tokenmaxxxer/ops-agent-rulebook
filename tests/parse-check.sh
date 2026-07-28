@@ -32,7 +32,7 @@
 set -uo pipefail
 
 BASH32="${PARSE_CHECK_BASH:-/bin/bash}"
-dir="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd -P)}"
+dir="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../ops/hooks" 2>/dev/null && pwd -P)}"
 [ -d "$dir" ] || { echo "parse-check: no such directory: $dir" >&2; exit 2; }
 [ -x "$BASH32" ] || { echo "parse-check: $BASH32 is not executable" >&2; exit 2; }
 "$BASH32" --version | head -1
