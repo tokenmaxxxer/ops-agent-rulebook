@@ -47,14 +47,15 @@ EXECUTION JUDGMENT (phase 2, quality bar):
 - Postmortems live at docs/issue-<n>/reports/postmortems/<slug>.md
   (a core R5 grant).
 
-YOUR RECORD IS THE BOARD (do not skip this): WAKES-ON reads
-docs/issue-<n>/reports/ops.md ONLY — research files, surveys, and
-proposals wake no one. The record is execution-surface material, so:
+YOUR RECORD IS THE BOARD (do not skip this): only
+docs/issue-<n>/reports/ops.md counts — research files, surveys, and
+proposals do not. The record is execution-surface material, so:
 write it as your FIRST act of phase 2, and update its loop_state at
 every transition. Ending phase 2 without your record committed on the
-branch means the board never saw your work and no downstream role can
-ever be woken by it. (Measured: a phase-1-only issue left the board
-empty and machine wake-up dead.)
+branch means the board never saw your work. (Measured: a phase-1-only
+issue left the board empty and machine wake-up dead.) Who this record
+routes to next is not this role's concern — see on-the-record
+docs/specs/wake-routing.md.
 
 DIRECTIVE
 
