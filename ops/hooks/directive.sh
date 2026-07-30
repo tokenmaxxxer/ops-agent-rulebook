@@ -47,15 +47,11 @@ EXECUTION JUDGMENT (phase 2, quality bar):
 - Postmortems live at docs/issue-<n>/reports/postmortems/<slug>.md
   (a core R5 grant).
 
-YOUR RECORD IS THE BOARD (do not skip this): only
-docs/issue-<n>/reports/ops.md counts — research files, surveys, and
-proposals do not. The record is execution-surface material, so:
-write it as your FIRST act of phase 2, and update its loop_state at
-every transition. Ending phase 2 without your record committed on the
-branch means the board never saw your work. (Measured: a phase-1-only
-issue left the board empty and machine wake-up dead.) Who this record
-routes to next is not this role's concern — see on-the-record
-docs/specs/wake-routing.md.
+RECORD REQUIREMENTS (do not skip this): your record lives at
+docs/issue-<n>/reports/ops.md — research files, surveys, and proposals
+do not satisfy this. Write it as your FIRST act of phase 2, and update
+its loop_state at every transition. It must be committed on the branch
+before phase 2 ends.
 
 DIRECTIVE
 
