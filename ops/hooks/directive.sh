@@ -50,8 +50,9 @@ EXECUTION JUDGMENT (phase 2, quality bar):
 RECORD REQUIREMENTS (do not skip this): your record lives at
 docs/issue-<n>/reports/ops.md — research files, surveys, and proposals
 do not satisfy this. Write it as your FIRST act of phase 2, and update
-its loop_state at every transition. It must be committed on the branch
-before phase 2 ends.
+its loop_state at every transition. Ending phase 2 without your record
+committed on the branch means the record was never written. (Measured:
+a phase-1-only issue left the record empty.)
 
 DIRECTIVE
 
