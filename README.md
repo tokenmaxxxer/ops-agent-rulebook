@@ -29,10 +29,14 @@ once the error budget is spent.
                                         judgment (pointable-artifact rule,
                                         error-budget refusal, human-reviewed
                                         postmortems)
-    ops/hooks/record-fields-gate.sh     s20 minimum content on the record
-    ops/hooks/trailer-gate.sh           commits staging docs/issue-<n>/** carry
-                                        `Subject: issue-<n>`
-    ops/hooks/handbook-trigger-gate.sh  s21 same-turn handbook sync
+    ops/hooks/proposal-fields-gate.sh       RFC-shaped proposal sections
+                                            (scope, risk, rollback, sourced
+                                            evidence) on docs/issue-<n>/
+                                            proposals/*.md (issue-27)
+    ops/hooks/rollout-plan-fields-gate.sh   non-empty per-metric threshold
+                                            before a rollout-plan step is
+                                            written result: pass|fail
+                                            (issue-27)
     ops/skills/                         readiness-checklist, rollout-plan,
                                         error-budget-policy, postmortem
     tests/                              repo-level checks (never installed)
