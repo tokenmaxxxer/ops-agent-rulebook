@@ -12,217 +12,209 @@ Scout brief: `docs/issue-33/reports/release-engineering/scout-brief.md`.
 
 ## Scope / change description
 
-Issue #27 adopted a methodology (RFC-shaped phase-1 proposals; confirmed
-PRR/canary/postmortem phase-2 shapes) that landed as directive prose (a
-one-line `PRODUCES` summary) plus two PreToolUse field gates
-(`proposal-fields-gate.sh`, `rollout-plan-fields-gate.sh`). Issue #33 asks
-that this be brought up to implementation-rulebook's hook-machine bar:
-(1) elaborate `ops/hooks/directive.sh` into per-phase, per-facet,
-multi-paragraph stage/judgment/prohibition text instead of one-line
-summaries; (2) confirm/extend the methodology gates so every approved
-"produces" element from issue-27 is machine-checked, adding state tracking
-only where a genuine ordering constraint exists; (3) add gate-specific
-tests at repo-root `tests/`; (4) add an agent/checklist only if a genuinely
-repeated procedure is found (scout found none beyond what already exists).
-This is a phase-1 design document only — no file under `ops/hooks/` or
-`tests/` is modified by this PR.
+This revision responds to the approver's plugin-set feedback on issue #33 /
+PR #34 and **supersedes** this document's prior design (a single elaborated
+`ops/hooks/directive.sh` plus two extended gates). The feedback: this role's
+enforcement mechanism must not be one directive/gate pair grown larger — it
+must be a **set of independent, self-contained plugins**, one per adopted
+methodology, each freelunch/scout-level complete (own `.claude-plugin/
+plugin.json`, own hooks, own tests), the way `/home/jwjung/tokenmaxxxer/
+tokenmaxxxer-core/` already structures `core`, `terse`, `freelunch`,
+`scout`, `warrant` as separate marketplace entries rather than one plugin
+with growing internals.
+
+Issue #27 adopted a methodology (RFC-shaped phase-1 proposals; PRR/canary/
+postmortem/error-budget phase-2 shapes — `docs/issue-27/proposals/
+2026-07-31-rulebook-maturation.md`) that today lives as one `ops` plugin: a
+one-line-facet `ops/hooks/directive.sh`, two PreToolUse gates
+(`proposal-fields-gate.sh`, `rollout-plan-fields-gate.sh`), and four skills
+(`error-budget-policy`, `postmortem`, `readiness-checklist`,
+`rollout-plan`). This proposal's design: split that single plugin into
+**five** independent plugins, each owning exactly one methodology, and
+define phase-1 and phase-2 norms as **compositions** of those plugins
+rather than facets of one directive. This is still a phase-1 design
+document only — no file under `ops/hooks/`, `ops/skills/`,
+`.claude-plugin/marketplace.json`, or `tests/` is modified by this PR.
+
+## Plugin list
+
+Five independent, single-methodology plugins. Each is intended to live as
+its own top-level directory in phase 2 (`<name>/.claude-plugin/
+plugin.json`, `<name>/hooks/`, `<name>/hooks/tests/`), registered as a
+separate entry in this repo's `.claude-plugin/marketplace.json` — mirroring
+how `tokenmaxxxer-core/scout/` and `tokenmaxxxer-core/freelunch/` each carry
+their own `hooks/hooks.json`, `hooks/*.sh`, and `hooks/tests/parse-check.sh`
+rather than sharing one directive file.
+
+| Plugin | Methodology owned | Components | New / relocated |
+|---|---|---|---|
+| `proposal-norm` | RFC-shaped phase-1 proposal (scope, risk, rollback, sourced-evidence — issue-27's adopted shape) | directive fragment (proposal-stage prohibitions, stated as rules, not summary); `proposal-fields-gate.sh`; allow/deny tests | Gate relocated unchanged from `ops/hooks/proposal-fields-gate.sh`; directive fragment new |
+| `readiness-checklist` | PRR (production readiness review): all seven dimensions (monitoring, alerting, rollback, capacity, runbooks, dependencies, on-call) must resolve yes/no with a pointable artifact | directive fragment (judgment criterion + "no link is a FAIL, not a pass with a caveat" prohibition); new gate `readiness-fields-gate.sh`; allow/deny tests | Gate wholly new — no PRR field gate exists today |
+| `rollout-plan` | canary rollout: pre-declared thresholds before result | directive fragment (existing "no step may be marked pass/fail with a threshold decided after the fact" prohibition); `rollout-plan-fields-gate.sh`; allow/deny tests (missing-threshold+pass -> deny; pending -> allow; thresholded+pass -> allow) | Gate relocated unchanged from `ops/hooks/rollout-plan-fields-gate.sh`; directive fragment new |
+| `error-budget-policy` | error-budget hard stop: exhausted budget refuses release steps regardless of readiness, non-discretionary | directive fragment (hard-stop assertion, not an on-call-overridable judgment call); new gate `error-budget-gate.sh` blocking a rollout-plan step advance when the record's budget field reads exhausted; allow/deny tests | Gate wholly new — today error-budget-policy is skill-prose only, no mechanical check |
+| `postmortem` | human-reviewed postmortem before loop closes | directive fragment ("satisfied only by a postmortem a HUMAN has reviewed... `Reviewed by` field must be non-empty before `loop_state` may read `steady`"); `postmortem-review-gate.sh` (PreToolUse on postmortem file writes / `loop_state` transitions); allow/deny tests | Gate wholly new; exact `Reviewed by` field name confirmed against `postmortem-template.md` in phase 2, not invented here |
+
+## Composition design
+
+The core of this design, per the feedback, is not the plugin list itself
+but how plugins **compose** into the two norms this role enforces:
+
+- **Phase-1 (기획서) norm = `proposal-norm` alone.** No other plugin
+  participates in phase-1 enforcement — a release proposal document is a
+  single self-contained artifact, and `proposal-fields-gate.sh` already
+  polices it as one document with no cross-plugin dependency (unchanged
+  from the current design's risk analysis on this point).
+- **Phase-2 (산출물) norm = `readiness-checklist` + `rollout-plan` +
+  `error-budget-policy` + `postmortem`, composed.** A release's phase-2
+  deliverable is complete only when all four plugins fire and pass — no
+  single plugin alone constitutes the phase-2 norm. This mirrors issue-27's
+  four adopted phase-2 skill shapes exactly (PRR readiness, canary rollout,
+  error-budget hard-stop, human-reviewed postmortem), now each backed by
+  its own gate instead of one shared directive facet.
+- **The current `ops` plugin's role directive stops being the single
+  owner of all four `HAND_OFF` facets.** Today `ops/hooks/directive.sh`
+  hand-writes one `HAND_OFF` string covering readiness, error budget,
+  rollout, and postmortem together. Under this design, each of the four
+  phase-2 plugins owns its own directive fragment for its methodology, and
+  `ops/hooks/directive.sh` (or its phase-2 successor) **composes** them at
+  role-enable time by sourcing/concatenating the enabled plugins' fragments
+  before making the same `core_role_directive "$YOU_DECIDE" "$USE_WHEN"
+  "$PRODUCES" "$HAND_OFF"` call — the 4-arg signature is unchanged (still
+  matches `core/hooks/lib/role-directive.sh`, which only echoes its four
+  string args and adds no parsing constraint), but each arg's content is
+  now assembled from N plugin fragments rather than hand-written once.
+  **This composition point is an open phase-2 design question, not
+  resolved here.** A candidate shape, given as a starting point for phase
+  2 to confirm or replace:
+
+  ```sh
+  # ops/hooks/directive.sh (phase-2 sketch, not implemented in this PR)
+  HAND_OFF=""
+  for frag in readiness-checklist rollout-plan error-budget-policy postmortem; do
+    frag_file="${CLAUDE_PLUGIN_ROOT_RELEASE_ENG:-.}/${frag}/hooks/directive-fragment.txt"
+    [ -f "$frag_file" ] && HAND_OFF="${HAND_OFF}$(cat "$frag_file")"$'\n\n'
+  done
+  core_role_directive "$YOU_DECIDE" "$USE_WHEN" "$PRODUCES" "$HAND_OFF"
+  ```
+
+  Open questions phase 2 must resolve, not this proposal: fragment file
+  format/location convention, ordering guarantee across concatenated
+  fragments, and what happens when a plugin is registered in
+  `marketplace.json` but not enabled for this role.
+- **State-tracking scope stays as previously scouted**, now attributed
+  per-plugin: none needed for `proposal-norm` or `rollout-plan`
+  (single-document, stateless, per scout-brief.md item 2 and the risk
+  analysis below); `error-budget-policy` performs a single read of the
+  record file's budget field, no cross-file ordering; `postmortem` is the
+  one plugin with a genuine field-presence gate (not full cross-file state
+  machinery — scout already ruled that out; cite scout-brief.md item 2).
 
 ## Risk
 
 Named failure modes if this proposal's design is wrong:
 
-- **Directive elaboration ships as padding, not instruction** — if the
-  `$'...'` blocks restate skill-file prose instead of adding
-  trigger-condition/prohibition specificity, phase 2 produces a longer
-  directive with the same enforcement gap issue #33 was raised to close.
-  Mitigated by the per-facet spec below being written as concrete
-  triggers ("when X, before Y, refuse Z"), mirroring coding's directive
-  shape exactly rather than summarizing it.
-- **Inventing an ordering/state requirement that doesn't exist** — scout
-  found no genuine cross-file ordering gap in the two existing gates (each
-  polices one document's own completeness). Building a coding-style
-  cross-file state machine here anyway would add machinery this role's
-  actual "produces" set does not need, and could silently start refusing
-  legitimate single-document writes it was never designed to judge.
-  Mitigated by explicitly scoping state tracking OUT for the two existing
-  gates (see below) and IN, narrowly, only for the one place scout found a
-  real candidate: postmortem human-review-before-close.
-- **Gate tests copy a nonexistent exemplar** — implementation-rulebook
-  itself has no per-gate fixture file (confirmed by scout: `coding/hooks/
-  tests/` does not exist). A proposal that assumed one and pointed phase 2
-  at it would send phase 2 hunting for a file that isn't there. Mitigated
-  by pointing at the actual working precedent: this repo's own
-  `tests/deny-only-check.sh`, which already embeds a substance probe.
+- **Five independent plugins drift out of sync with no shared directive
+  owner.** With one hand-written `ops/hooks/directive.sh` today, all four
+  `HAND_OFF` facets are guaranteed present because one file asserts them.
+  Splitting into five plugins risks a plugin being registered in
+  `marketplace.json` but its directive fragment silently missing from the
+  composed `HAND_OFF` (e.g., disabled, renamed, fragment file moved) —
+  producing a directive that no longer states a rule its gate still
+  enforces, or a gate with no directive-text backing. Mitigated in phase 2
+  by a lint/gate step that asserts every enabled plugin's directive
+  fragment is present (non-empty) in the composed directive before
+  `directive.sh` returns — analogous in spirit to `tests/parse-check.sh`'s
+  role as a structural precondition check, but scoped to fragment presence
+  rather than bash parseability.
+- **Directive elaboration ships as padding, not instruction** (carried
+  forward, now per-fragment): if a plugin's directive fragment restates
+  its own skill-file prose instead of adding trigger-condition/prohibition
+  specificity, the composed directive grows without closing the
+  enforcement gap issue #33 was raised over. Mitigated by writing each
+  fragment as concrete triggers ("when X, before Y, refuse Z"), per the
+  plugin list above, not summary prose.
+- **Inventing an ordering/state requirement that doesn't exist** (carried
+  forward): scout found no genuine cross-file ordering gap beyond the
+  postmortem human-review case. Mitigated by the state-tracking scope
+  stated explicitly above, per plugin, rather than assumed uniformly.
+- **Gate tests copy a nonexistent exemplar** (carried forward):
+  implementation-rulebook's own cited rigor-bar gate has no dedicated
+  per-gate fixture file (scout finding). Mitigated by pointing every new
+  plugin's `hooks/tests/` at the actual working precedent — this repo's
+  own `tests/deny-only-check.sh`, which already embeds a substance probe
+  (temp dir + synthetic PreToolUse JSON on stdin + assert deny).
 
 ## Rollback / back-out path
 
 This PR adds only new files under `docs/issue-33/`. If the design is
 rejected: do not merge; comment on the PR with the objection; a revised
 proposal supersedes this one. If merged and phase 2 later proves the
-design wrong: `git revert` the phase-2 delivery PR — the two existing
-issue-27 gates and directive remain unaffected since phase 2 will edit them
-additively (extending `PRODUCES`'s string content and adding sibling gate
-files), not replacing the mechanism issue-27 already shipped. No data
-migration, no external state, is introduced.
+plugin-set design wrong: `git revert` the phase-2 delivery PR(s) — issue-27's
+two existing gates and directive remain functionally unaffected during
+migration since phase 2 relocates them via `git mv` (see Migration note),
+not rewrite, so a revert restores the pre-migration `ops/hooks/` layout
+intact. No data migration, no external state, is introduced.
 
-## Evidence format
+## Gate tests
 
-Every methodology/precedent claim below cites the file read this session.
+Per plugin, same specificity as the prior single-plugin design, now
+attributed to each plugin's own `hooks/tests/`, following the substance-probe
+pattern already established by `tests/deny-only-check.sh`:
 
-## Directive elaboration design (phase 2 target for `ops/hooks/directive.sh`)
-
-Following coding's `directive.sh` shape (each of the four
-`core_role_directive` arguments becomes a `$'...'` multi-line block; the
-function signature is unchanged — `core_role_directive "$YOU_DECIDE"
-"$USE_WHEN" "$PRODUCES" "$HAND_OFF"`, confirmed against
-`core/hooks/lib/role-directive.sh`, which only echoes its four string
-args and adds no parsing constraint):
-
-- **`YOU_DECIDE`** (unchanged in substance, kept as today): the role's
-  authority statement — no phase split needed here, it is already a
-  judgment-criteria statement ("gated by measurable reliability rather
-  than discretionary sign-off").
-- **`USE_WHEN`** (phase 1, elaborated per facet):
-  - RESEARCH (scout stage): what "exemplar" means for a release
-    (comparable systems' rollout curves/bake times, failure modes that
-    reached production in similar systems, postmortem patterns worth
-    checking against this change) — already present; keep, unchanged.
-  - CURRENT-STATE SURVEY stage: explicit judgment criterion — every one of
-    the seven PRR dimensions (monitoring, alerting, rollback, capacity,
-    runbooks, dependencies, on-call) must resolve to yes/no with a
-    pointable artifact at survey time, not only at gate time — this moves
-    the readiness-checklist's phase-2 bar earlier, into the phase-1
-    stage's judgment criteria, so a survey that says "we have monitoring"
-    with nothing to link is flagged as incomplete before proposal, not
-    only refused at gate time.
-  - PROPOSAL stage (new explicit sub-block): the four RFC-shaped sections
-    from issue-27, stated as **prohibitions**, not summary — "no proposal
-    may state a risk as 'risks exist'; name the failure mode. No proposal
-    may omit rollback on the claim it is obvious. No adopted-methodology
-    claim may go uncited." This turns proposal-fields-gate's checked
-    strings into directive-stated rules the directive itself asserts,
-    closing the "gate as the only source of truth" gap.
-- **`PRODUCES`** (phase 1, split by facet instead of one run-on sentence):
-  one paragraph for the rollout plan (skill: rollout-plan) stating the
-  per-step threshold-before-result rule as a prohibition ("no step may be
-  marked pass/fail with a threshold decided after the fact"); one separate
-  paragraph for the RFC-shaped proposal norm citing issue-27's four
-  sections explicitly by name.
-- **`HAND_OFF`** (phase 2, elaborated per facet, each an explicit
-  judgment criterion + prohibition pair, following coding's pattern of
-  named sub-rules rather than one sentence):
-  - Readiness: "yes/no + pointable artifact per PRR item; an item with no
-    link is a FAIL, not a pass with a caveat."
-  - Error budget: "exhausted refuses release steps regardless of
-    readiness — this is a hard stop, not a discretionary judgment call
-    the on-call engineer may override in the directive's own text."
-  - Rollout: "steps advance only on pre-declared thresholds; inconclusive
-    holds — holding is not a failure state requiring escalation, it is
-    the designed outcome of an inconclusive read."
-  - Postmortem: "satisfied only by a postmortem a HUMAN has reviewed; a
-    model-only postmortem does not close the loop — state where the
-    `Reviewed by` field must be non-empty before `loop_state` may read
-    `steady`."
-
-## Methodology gate design (phase 2 target — described, not implemented here)
-
-Two existing gates are already machine-verifying their respective single
-documents; this proposal's phase 2 does not replace them, only extends
-coverage:
-
-1. **`proposal-fields-gate.sh`** — no structural change; confirm during
-   phase 2 that the directive elaboration above (proposal-stage
-   prohibitions) is textually consistent with what the gate already
-   checks (scope/risk/rollback/citation) so directive and gate assert the
-   same rule in two forms (prose + mechanical), never a diverging pair.
-2. **`rollout-plan-fields-gate.sh`** — no structural change; same
-   consistency check against the elaborated `PRODUCES` rollout-plan
-   paragraph.
-3. **New, narrowly-scoped gate candidate: postmortem-review-gate.sh** — on
-   a write to a postmortem file under
-   `docs/issue-<n>/reports/postmortems/<slug>.md` (or the record file's
-   `loop_state` transition to `steady`/`idle`), require a non-empty
-   `Reviewed by:` field (and `Reviewer satisfied: yes`, or equivalent, if
-   the postmortem-template skill's exact field names differ — phase 2
-   confirms the literal field names against `postmortem-template.md`
-   before writing the regex) before the write is allowed. This is the one
-   place scout identified an actual gap between what the skill's prose
-   requires (human review before close) and what today is
-   mechanically enforced (nothing) — everywhere else, no new state
-   tracking is warranted (see Risk above and scout-brief item 2).
-   Fail-closed shape, kill switch, `hooks.json` registration: identical
-   discipline to the two existing gates.
-4. **State tracking**: explicitly NOT added for the two existing gates
-   (no cross-file ordering constraint found). If phase 2's confirmation of
-   postmortem-template field names finds the human-review step already
-   spans multiple files (e.g., a separate reviewer sign-off record), a
-   single boolean marker (not a coding-style multi-role finding lifecycle)
-   is sufficient — phase 2 decides the minimal shape once the literal
-   fields are read, not invented here.
-
-## Gate tests (phase 2 target — described, not implemented here)
-
-Per scout finding 3: implementation-rulebook's own cited rigor-bar gate
-(`coding-progress-gate.sh`) has no dedicated per-gate fixture file
-anywhere in that rulebook; the actually-working local precedent is this
-repo's `tests/deny-only-check.sh`, which already embeds a "substance
-probe" (temp dir, synthetic PreToolUse JSON on stdin, assert a deny).
-Phase 2 should:
-
-- Add allow/deny cases for `proposal-fields-gate.sh`: (a) a proposal
-  document missing each of the four sections in turn -> expect deny with
-  the specific missing-section name in stderr; (b) a complete proposal
+- **`proposal-norm/hooks/tests/`**: (a) a proposal document missing each of
+  the four sections (scope/risk/rollback/citation) in turn -> expect deny
+  with the specific missing-section name in stderr; (b) a complete proposal
   with all four sections -> expect exit 0.
-- Add allow/deny cases for `rollout-plan-fields-gate.sh`: (a) a step
-  marked `result: pass` with a metric missing `threshold:` -> deny; (b)
-  same step with `result: pending` -> allow (thresholds not required
-  until resolution); (c) same step fully thresholded and `result: pass`
-  -> allow.
-- If the postmortem-review gate above is built, add: (a) write with empty
-  `Reviewed by:` -> deny; (b) write with a populated reviewer field ->
-  allow.
-- Location: extend `tests/deny-only-check.sh` with role-specific probes
-  (matching its existing internal pattern), or add a sibling
-  `tests/release-engineering-gates-check.sh` if the existing file's
-  single-responsibility (deny-only + one generic substance probe) should
-  not grow further — phase 2 decides based on how large the addition gets.
+- **`readiness-checklist/hooks/tests/`**: (a) a readiness document missing
+  one of the seven PRR dimensions -> deny; (b) a dimension present but with
+  no link/pointer -> deny (this is the "FAIL, not pass with a caveat" rule);
+  (c) all seven dimensions present, each with a pointer -> allow.
+- **`rollout-plan/hooks/tests/`**: (a) a step marked `result: pass` with a
+  metric missing `threshold:` -> deny; (b) same step with `result: pending`
+  -> allow (thresholds not required until resolution); (c) same step fully
+  thresholded and `result: pass` -> allow.
+- **`error-budget-policy/hooks/tests/`**: (a) record's budget field reads
+  `exhausted` and a rollout-plan step attempts to advance -> deny; (b)
+  budget field reads non-exhausted -> allow.
+- **`postmortem/hooks/tests/`**: (a) write with empty `Reviewed by:` field
+  -> deny; (b) write with a populated reviewer field -> allow. Exact field
+  name confirmed against `postmortem-template.md` in phase 2, not invented
+  here.
 - All new/edited gate `.sh` files must continue to pass
   `tests/parse-check.sh` (bash 3.2 parseability) unchanged.
 
-## Agents / checklists
+## Migration note
 
-Scout found no repeated procedural step in release-engineering's artifact
-set analogous to coding's hunt cadence. The four phase-2 skills
-(`error-budget-policy`, `readiness-checklist`, `rollout-plan`,
-`postmortem`) already function as the checklists. No new agent or
-checklist file is proposed beyond the postmortem-review gate above.
-
-## Canon reference discipline
-
-This proposal references `core/hooks/lib/role-directive.sh` and
-implementation-rulebook's hook files by path, for comparison and as the
-call-signature contract phase 2 must preserve. No content from either is
-copied into this repo; `docs/handbooks/canon-scripts.md`'s reference-only
-rule is unaffected — phase 2 continues sourcing `role-directive.sh` via
-`${CLAUDE_PLUGIN_ROOT_CORE:-...}` exactly as `ops/hooks/directive.sh`
-already does today.
+Two gates already exist under `ops/hooks/` today:
+`proposal-fields-gate.sh` and `rollout-plan-fields-gate.sh`. Phase 2
+relocates each via `git mv` — not a rewrite — into `proposal-norm/hooks/`
+and `rollout-plan/hooks/` respectively, then updates the corresponding
+`hooks.json` registration and adds a `.claude-plugin/marketplace.json`
+entry for each new plugin directory. Three gates are wholly new and have
+no prior file to relocate: `readiness-fields-gate.sh` (under
+`readiness-checklist/hooks/`), `error-budget-gate.sh` (under
+`error-budget-policy/hooks/`), and `postmortem-review-gate.sh` (under
+`postmortem/hooks/`).
 
 ## Out of scope
 
-- Editing `ops/hooks/directive.sh`, `proposal-fields-gate.sh`,
-  `rollout-plan-fields-gate.sh`, `hooks.json`, or any `tests/*.sh` file —
-  phase 2 only, after human Approve.
+- Editing `ops/hooks/*`, `ops/skills/*`, `.claude-plugin/marketplace.json`,
+  or any `tests/*.sh` file — phase 2 only, after human Approve.
 - Re-deriving or changing the four phase-2 skills' methodology content
   (confirmed correct by issue-27, untouched here).
-- Building the postmortem-review gate itself, or confirming
+- Building any of the three new gates, or confirming
   `postmortem-template.md`'s literal field names — phase 2 reads the
   actual skill file before writing the regex.
+- Resolving the directive-fragment composition mechanism's open questions
+  (format, ordering, enable/registration mismatch handling) — flagged
+  above as an open phase-2 design question, not settled by this proposal.
 - Any cross-role (coding/verify-style) finding-lifecycle machinery — scout
   found no such dependency for this role's current artifact set.
 
 ## Phase gate
 
 **PHASE 1 ONLY.** This PR proposes a design; it implements nothing under
-`ops/hooks/` or `tests/`. Phase 2 opens only on an `approvers.md` PR
-Approve, or the exact-string `APPROVE issue-33/release-engineering` issue
-comment, per contract v3 s19.
+`ops/hooks/`, `ops/skills/`, `.claude-plugin/marketplace.json`, or
+`tests/`. Phase 2 opens only on an `approvers.md` PR Approve, or the
+exact-string `APPROVE issue-33/release-engineering` issue comment, per
+contract v3 s19.
