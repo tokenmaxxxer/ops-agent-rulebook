@@ -1,0 +1,10 @@
+{
+  "name": "postmortem",
+  "description": "One of four release-engineering phase-2 norm plugins: incident -> steady requires a HUMAN-reviewed postmortem, not a self-certified draft. postmortem-review-gate.sh refuses ops/state.md's incident -> steady transition unless the referenced postmortem file's Reviewed by field is non-empty. Ships the postmortem skill and its template.",
+  "author": {
+    "name": "Jung Jiwon & Lee Jongkwan"
+  },
+  "dependencies": {
+    "note": "Requires the core plugin from tokenmaxxxer-core installed alongside this plugin. Composes with readiness-checklist, rollout-plan, and error-budget-policy to form the release-engineering phase-2 norm."
+  }
+}

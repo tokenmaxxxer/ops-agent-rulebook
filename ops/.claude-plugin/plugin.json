@@ -1,10 +1,10 @@
 {
   "name": "ops",
-  "description": "The ops role on contract v3: may it ship, does it keep running \u2014 readiness gated by pointable artifacts (a yes with nothing to link is a FAIL), pre-declared rollout thresholds, error-budget refusal, human-reviewed postmortems. Ships skills: readiness-checklist, rollout-plan, error-budget-policy, postmortem.",
+  "description": "The release-engineering role directive and phase-1/phase-2 norm composer on contract v3 (issue-33): itself owns no methodology gate. Phase 1 = proposal-norm alone; phase 2 = readiness-checklist + rollout-plan + error-budget-policy + postmortem, composed. This plugin's directive.sh concatenates each enabled sibling plugin's own directive-fragment.txt into HAND_OFF at SessionStart, instead of hand-writing all four facets itself.",
   "author": {
     "name": "Jung Jiwon & Lee Jongkwan"
   },
   "dependencies": {
-    "note": "Requires the core and warrant plugins from tokenmaxxxer-core installed alongside this plugin (core issues #63/#66). on-the-record installs them per role; this field only documents the requirement."
+    "note": "Requires the core and warrant plugins from tokenmaxxxer-core, plus this repo's proposal-norm, readiness-checklist, rollout-plan, error-budget-policy, and postmortem plugins, installed alongside this plugin. on-the-record installs them per role; this field only documents the requirement."
   }
 }

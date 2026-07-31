@@ -1,0 +1,10 @@
+{
+  "name": "readiness-checklist",
+  "description": "One of four release-engineering phase-2 norm plugins: the seven-dimension production readiness review (PRR), gated so a \"yes\" with no pointable artifact is a FAIL, not a pass with a caveat. readiness-fields-gate.sh refuses ops/state.md's readiness -> rollout transition on any unresolved or unpointed checklist item. Ships the readiness-checklist skill.",
+  "author": {
+    "name": "Jung Jiwon & Lee Jongkwan"
+  },
+  "dependencies": {
+    "note": "Requires the core plugin from tokenmaxxxer-core installed alongside this plugin. Composes with rollout-plan, error-budget-policy, and postmortem to form the release-engineering phase-2 norm."
+  }
+}
