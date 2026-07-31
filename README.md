@@ -56,5 +56,9 @@ Kill switch: `OPS_CYCLE_OFF=1`.
 ## Run the checks
 
     /bin/bash tests/parse-check.sh
-    /bin/bash tests/run-gate-tests.sh
     /bin/bash tests/deny-only-check.sh
+    /bin/bash <core>/hooks/tests/stub-check.sh ops/hooks
+
+The role-agnostic gates (trailer/record-fields/handbook-trigger) and their
+tests now live in core canon (core issues #63/#66); this repo no longer
+vendors copies.
