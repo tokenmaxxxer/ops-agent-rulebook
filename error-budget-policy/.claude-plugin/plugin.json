@@ -1,0 +1,10 @@
+{
+  "name": "error-budget-policy",
+  "description": "One of four release-engineering phase-2 norm plugins: the error-budget hard stop. error-budget-gate.sh refuses ops/state.md's steady -> readiness transition outright when error_budget reads exhausted, regardless of how ready the next change looks — non-discretionary, not an on-call-overridable judgment call. Ships the error-budget-policy skill.",
+  "author": {
+    "name": "Jung Jiwon & Lee Jongkwan"
+  },
+  "dependencies": {
+    "note": "Requires the core plugin from tokenmaxxxer-core installed alongside this plugin. Composes with readiness-checklist, rollout-plan, and postmortem to form the release-engineering phase-2 norm."
+  }
+}

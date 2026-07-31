@@ -1,0 +1,10 @@
+{
+  "name": "rollout-plan",
+  "description": "One of four release-engineering phase-2 norm plugins: pre-declared per-step, per-metric rollout thresholds. A rollout step may not be marked result: pass or result: fail with an unset threshold — rollout-plan-fields-gate.sh refuses the write; result: pending is never gated. Ships the rollout-plan skill.",
+  "author": {
+    "name": "Jung Jiwon & Lee Jongkwan"
+  },
+  "dependencies": {
+    "note": "Requires the core plugin from tokenmaxxxer-core installed alongside this plugin. Composes with readiness-checklist, error-budget-policy, and postmortem to form the release-engineering phase-2 norm."
+  }
+}

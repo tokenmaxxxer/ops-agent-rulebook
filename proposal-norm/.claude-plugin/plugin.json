@@ -1,0 +1,10 @@
+{
+  "name": "proposal-norm",
+  "description": "The release-engineering phase-1 norm, alone: every docs/issue-<n>/proposals/*.md is RFC-shaped (scope/change description, a named risk, a rollback/back-out path, at least one sourced-evidence citation) before it may be written, enforced by proposal-fields-gate.sh on every Write/Edit/MultiEdit to a proposal document.",
+  "author": {
+    "name": "Jung Jiwon & Lee Jongkwan"
+  },
+  "dependencies": {
+    "note": "Requires the core plugin from tokenmaxxxer-core installed alongside this plugin."
+  }
+}

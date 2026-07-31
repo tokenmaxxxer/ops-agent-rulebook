@@ -7,7 +7,32 @@
     {
       "name": "ops",
       "source": "./ops",
-      "description": "The ops role on contract v3: may it ship, does it keep running \u2014 readiness gated by pointable artifacts (a yes with nothing to link is a FAIL), pre-declared rollout thresholds, error-budget refusal, human-reviewed postmortems. Ships skills: readiness-checklist, rollout-plan, error-budget-policy, postmortem."
+      "description": "The release-engineering role directive and phase-1/phase-2 norm composer on contract v3 (issue-33): itself owns no methodology gate; composes proposal-norm (phase 1) and readiness-checklist + rollout-plan + error-budget-policy + postmortem (phase 2, together) into one role directive."
+    },
+    {
+      "name": "proposal-norm",
+      "source": "./proposal-norm",
+      "description": "The release-engineering phase-1 norm, alone: every docs/issue-<n>/proposals/*.md is RFC-shaped (scope/change description, a named risk, a rollback/back-out path, sourced-evidence citation) before it may be written."
+    },
+    {
+      "name": "readiness-checklist",
+      "source": "./readiness-checklist",
+      "description": "One of four release-engineering phase-2 norm plugins: the seven-dimension production readiness review, gated so a “yes” with no pointable artifact is a FAIL, not a pass with a caveat."
+    },
+    {
+      "name": "rollout-plan",
+      "source": "./rollout-plan",
+      "description": "One of four release-engineering phase-2 norm plugins: pre-declared per-step, per-metric rollout thresholds — a step may not resolve pass/fail with an unset threshold."
+    },
+    {
+      "name": "error-budget-policy",
+      "source": "./error-budget-policy",
+      "description": "One of four release-engineering phase-2 norm plugins: the error-budget hard stop — steady -> readiness is refused outright while error_budget reads exhausted, non-discretionary."
+    },
+    {
+      "name": "postmortem",
+      "source": "./postmortem",
+      "description": "One of four release-engineering phase-2 norm plugins: incident -> steady requires a HUMAN-reviewed postmortem, never a self-certified draft."
     }
   ]
 }
