@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
-__fc(){ rc=$?; if [ "$rc" != 0 ] && [ "$rc" != 2 ]; then echo "fail-closed: gate aborted (rc=$rc)" >&2; exit 2; fi; }
-trap __fc EXIT
-# PreToolUse gate (Write|Edit|MultiEdit) — issue-33.
+. "${CLAUDE_PLUGIN_ROOT_CORE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../core" && pwd -P)}/hooks/lib/gate-lib.sh"
+gate_trap_fail_closed
+# PreToolUse gate (Write|Edit|MultiEdit) — issue-33, migrated to the
+# gate-house standard (issue-36, core issue #72's shared gate-lib.sh/
+# gate-lib.py).
 #
-# On a write whose resolved target is ops/state.md, if the resulting content
-# sets `status: rollout`, require every `## Checklist` line to resolve
-# yes/no, and every `yes` item to carry a non-empty `artifact:` pointer.
-# "We have monitoring" with nothing to link is a FAIL, not a pass with a
-# caveat (skill: readiness-checklist). Any other status value, or a write
-# that does not touch status, is not this gate's business.
+# On a write whose resolved target is ops/state.md, if the resulting
+# content sets `status: rollout`, require every `- item:` line inside the
+# `## Checklist` section (only) to resolve yes/no, and every `yes` item to
+# carry a non-empty `artifact:` pointer. "We have monitoring" with nothing
+# to link is a FAIL, not a pass with a caveat (skill: readiness-checklist).
+# Any other status value, or a write that does not touch status, is not
+# this gate's business.
 #
-# Kill switch: export READINESS_FIELDS_GATE_OFF=1
+# Kill switch: export READINESS_FIELDS_GATE_OFF=1 (or true/yes/on). Any
+# other value — including an unrecognized typo — leaves the gate active
+# (gate_kill_switch_active's fixed default; see gate-lib.sh).
 set -uo pipefail
 
 deny() { echo "readiness-fields-gate: refused — $1" >&2; exit 2; }
 
-case "${READINESS_FIELDS_GATE_OFF:-}" in
-  ""|0|false|no|off) ;;
-  *) exit 0 ;;
-esac
+gate_kill_switch_active "${READINESS_FIELDS_GATE_OFF:-}" || { trap - EXIT; exit 0; }
 
 command -v python3 >/dev/null 2>&1 || deny "requires python3, which is not on PATH; denying rather than guessing."
 
@@ -28,18 +30,17 @@ payload="$(cat 2>/dev/null || true)"
 RF_PAYLOAD="$payload" python3 <<'PY'
 import sys as _fc_sys  # fail-closed-on-internal-error
 try:
-    import json, os, posixpath, re, sys
+    import importlib.util, json, os, posixpath, re, sys
 
     def deny(m):
         sys.stderr.write("readiness-fields-gate: refused — %s\n" % m); sys.exit(2)
 
+    _spec = importlib.util.spec_from_file_location("gate_lib", os.environ["GATE_LIB_PY"])
+    gate_lib = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(gate_lib)
+
     raw = os.environ.get("RF_PAYLOAD", "")
-    try:
-        ev = json.loads(raw) if raw else {}
-    except ValueError:
-        deny("the tool-call payload is not valid JSON; the gate cannot judge readiness fields on an unparseable write.")
-    if not isinstance(ev, dict):
-        deny("the tool-call payload is not a JSON object; failing closed.")
+    ev = gate_lib.gate_parse_json_or_deny(raw, deny)
 
     tool = ev.get("tool_name")
     ti = ev.get("tool_input")
@@ -54,15 +55,6 @@ try:
     if not root:
         deny("no project root could be determined; failing closed.")
 
-    def resolve(p):
-        n = p.replace("\\", "/")
-        a = n if posixpath.isabs(n) else posixpath.join(root, n)
-        a = posixpath.normpath(a)
-        try:
-            return posixpath.normpath(os.path.realpath(a).replace("\\", "/"))
-        except OSError:
-            return a
-
     path = None
     if tool in ("Write", "Edit", "MultiEdit"):
         p = ti.get("file_path")
@@ -71,13 +63,13 @@ try:
     if path is None:
         sys.exit(0)
 
-    r = resolve(path)
-    if not r.startswith(root + "/"):
-        sys.exit(0)
-    rel = r[len(root):].lstrip("/")
+    rel = gate_lib.gate_normalize_path(root, path)
+    if rel is None:
+        sys.exit(0)  # resolves outside the project root — not this gate's business
     if rel != "ops/state.md":
         sys.exit(0)  # not the state file — not this gate's business
 
+    r = posixpath.join(root, rel)
     current = None
     if os.path.isfile(r):
         try:
@@ -86,31 +78,8 @@ try:
         except OSError:
             deny("%s exists but cannot be read; failing closed." % rel)
 
-    new_text = None
-    if tool == "Write":
-        c = ti.get("content")
-        if isinstance(c, str):
-            new_text = c
-    elif tool == "Edit":
-        o, n = ti.get("old_string"), ti.get("new_string")
-        if isinstance(o, str) and isinstance(n, str) and current is not None and o in current:
-            new_text = current.replace(o, n, 1)
-    elif tool == "MultiEdit":
-        edits = ti.get("edits")
-        text = current
-        if isinstance(edits, list) and text is not None:
-            ok = True
-            for e in edits:
-                if not isinstance(e, dict):
-                    ok = False; break
-                o, n = e.get("old_string"), e.get("new_string")
-                if not isinstance(o, str) or not isinstance(n, str) or o not in text:
-                    ok = False; break
-                text = text.replace(o, n, 1)
-            if ok:
-                new_text = text
-
-    if new_text is None:
+    new_text, ok = gate_lib.gate_reconstruct_write(tool, ti, current)
+    if not ok or new_text is None:
         deny(
             "this write targets %s but the gate cannot determine the resulting content "
             "from the tool input (tool=%r). Write the full state file with Write, or use an "
@@ -123,11 +92,27 @@ try:
     if status != "rollout":
         sys.exit(0)  # not a transition into rollout — not this gate's business
 
-    items = re.findall(r'(?m)^\s*-\s*item:.*$', new_text)
-    if not items:
+    # Section-scoped: only `- item:` lines inside the `## Checklist` block
+    # (from its heading to the next `##` heading or end-of-file) count as
+    # real checklist items — a line outside that block, even if it matches
+    # the same shape, is not admitted (issue-36 defect #3).
+    m_section = re.search(r'(?m)^##\s*Checklist\s*$', new_text)
+    if not m_section:
         deny(
             "status is being set to rollout but ops/state.md has no `## Checklist` "
-            "items at all — the seven-dimension PRR must be worked before this "
+            "section at all — the seven-dimension PRR must be worked before this "
+            "transition (skill: readiness-checklist)."
+        )
+    section_start = m_section.end()
+    m_next = re.search(r'(?m)^##\s', new_text[section_start:])
+    section_end = section_start + m_next.start() if m_next else len(new_text)
+    section_text = new_text[section_start:section_end]
+
+    items = re.findall(r'(?m)^\s*-\s*item:.*$', section_text)
+    if not items:
+        deny(
+            "status is being set to rollout but the `## Checklist` section has no "
+            "`- item:` lines — the seven-dimension PRR must be worked before this "
             "transition (skill: readiness-checklist)."
         )
 
