@@ -1,5 +1,5 @@
 {
-  "name": "ops",
+  "name": "release-engineering",
   "description": "The release-engineering role directive and phase-1/phase-2 norm composer on contract v3 (issue-33): itself owns no methodology gate. Phase 1 = proposal-norm alone; phase 2 = readiness-checklist + rollout-plan + error-budget-policy + postmortem, composed. This plugin's directive.sh concatenates each enabled sibling plugin's own directive-fragment.txt into HAND_OFF at SessionStart, instead of hand-writing all four facets itself.",
   "author": {
     "name": "Jung Jiwon & Lee Jongkwan"

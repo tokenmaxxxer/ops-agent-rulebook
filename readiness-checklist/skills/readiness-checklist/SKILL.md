@@ -96,7 +96,7 @@ agent moves itself to `rollout` — no human gate on this step. From there,
 `rollout -> rollout` (canary step promotion on a clean metric check) and
 `rollout -> incident` (breach past a hard pre-set threshold) are both
 `actor: agent` rows the `rollout-plan` skill's declared thresholds drive
-mechanically. See `ops-cycle/skills/rollout-plan/SKILL.md`.
+mechanically. See `rollout-plan/skills/rollout-plan/SKILL.md`.
 
 ## Working `rollout -> steady`
 
@@ -131,7 +131,7 @@ true.
 `steady -> incident` fires on a monitored signal crossing its declared
 threshold; nothing here gates that direction. Closing back to `steady` is
 `actor: user` and requires more than a filled-in field: the postmortem
-(`ops-cycle/skills/postmortem/SKILL.md`) must be filed *and* the user must
+(`postmortem/skills/postmortem/SKILL.md`) must be filed *and* the user must
 say, in their own turn, that a human reviewer has reviewed it and is
 satisfied with the document and its action items — Google's own rule is
 that "an unreviewed postmortem might as well never have existed," so a bare

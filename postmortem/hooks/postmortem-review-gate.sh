@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-__fc(){ rc=$?; if [ "$rc" != 0 ] && [ "$rc" != 2 ]; then echo "fail-closed: gate aborted (rc=$rc)" >&2; exit 2; fi; }
-trap __fc EXIT
-# PreToolUse gate (Write|Edit|MultiEdit) — issue-33.
+. "${CLAUDE_PLUGIN_ROOT_CORE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../core" && pwd -P)}/hooks/lib/gate-lib.sh" || { echo "postmortem-review-gate.sh: cannot source gate-lib.sh" >&2; exit 2; }
+gate_trap_fail_closed
+# PreToolUse gate (Write|Edit|MultiEdit|Bash) — issue-33, migrated to the
+# gate-house standard (issue-39, core issue #72's shared gate-lib.sh/
+# gate-lib.py).
 #
 # On a write whose resolved target is ops/state.md, if the CURRENT record's
 # status reads incident and the write's resulting content sets
@@ -11,15 +13,14 @@ trap __fc EXIT
 # postmortem). A bare non-empty postmortem: field with no reviewer recorded
 # in the document itself is not sufficient.
 #
-# Kill switch: export POSTMORTEM_REVIEW_GATE_OFF=1
+# Kill switch: export POSTMORTEM_REVIEW_GATE_OFF=1 (or true/yes/on). Any
+# other value — including an unrecognized typo — leaves the gate active
+# (gate_kill_switch_active's fixed default; see gate-lib.sh).
 set -uo pipefail
 
 deny() { echo "postmortem-review-gate: refused — $1" >&2; exit 2; }
 
-case "${POSTMORTEM_REVIEW_GATE_OFF:-}" in
-  ""|0|false|no|off) ;;
-  *) exit 0 ;;
-esac
+gate_kill_switch_active "${POSTMORTEM_REVIEW_GATE_OFF:-}" || { trap - EXIT; exit 0; }
 
 command -v python3 >/dev/null 2>&1 || deny "requires python3, which is not on PATH; denying rather than guessing."
 
@@ -29,18 +30,17 @@ payload="$(cat 2>/dev/null || true)"
 PR_PAYLOAD="$payload" python3 <<'PY'
 import sys as _fc_sys  # fail-closed-on-internal-error
 try:
-    import json, os, posixpath, re, sys
+    import importlib.util, json, os, posixpath, re, sys
 
     def deny(m):
         sys.stderr.write("postmortem-review-gate: refused — %s\n" % m); sys.exit(2)
 
+    _spec = importlib.util.spec_from_file_location("gate_lib", os.environ["GATE_LIB_PY"])
+    gate_lib = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(gate_lib)
+
     raw = os.environ.get("PR_PAYLOAD", "")
-    try:
-        ev = json.loads(raw) if raw else {}
-    except ValueError:
-        deny("the tool-call payload is not valid JSON; the gate cannot judge the postmortem-review field on an unparseable write.")
-    if not isinstance(ev, dict):
-        deny("the tool-call payload is not a JSON object; failing closed.")
+    ev = gate_lib.gate_parse_json_or_deny(raw, deny)
 
     tool = ev.get("tool_name")
     ti = ev.get("tool_input")
@@ -56,29 +56,38 @@ try:
         deny("no project root could be determined; failing closed.")
 
     def resolve(p):
-        n = p.replace("\\", "/")
-        a = n if posixpath.isabs(n) else posixpath.join(root, n)
-        a = posixpath.normpath(a)
+        rel = gate_lib.gate_normalize_path(root, p)
+        if rel is None:
+            return None
+        a = posixpath.join(root, rel)
         try:
             return posixpath.normpath(os.path.realpath(a).replace("\\", "/"))
         except OSError:
             return a
 
-    path = None
+    candidates = []
     if tool in ("Write", "Edit", "MultiEdit"):
         p = ti.get("file_path")
         if isinstance(p, str) and p:
-            path = p
-    if path is None:
+            candidates.append(p)
+    elif tool == "Bash":
+        cmd = ti.get("command")
+        if isinstance(cmd, str) and cmd:
+            candidates.extend(gate_lib.gate_bash_write_targets(cmd))
+
+    if not candidates:
         sys.exit(0)
 
-    r = resolve(path)
-    if not r.startswith(root + "/"):
-        sys.exit(0)
-    rel = r[len(root):].lstrip("/")
-    if rel != "ops/state.md":
+    rel = None
+    for c in candidates:
+        r = gate_lib.gate_normalize_path(root, c)
+        if r == "ops/state.md":
+            rel = r
+            break
+    if rel is None:
         sys.exit(0)  # not the state file — not this gate's business
 
+    r = posixpath.join(root, rel)
     current = None
     if os.path.isfile(r):
         try:
@@ -95,31 +104,20 @@ try:
     if cur_status != "incident":
         sys.exit(0)  # not closing an incident — this gate has nothing to refuse
 
-    new_text = None
-    if tool == "Write":
-        c = ti.get("content")
-        if isinstance(c, str):
-            new_text = c
-    elif tool == "Edit":
-        o, n = ti.get("old_string"), ti.get("new_string")
-        if isinstance(o, str) and isinstance(n, str) and o in current:
-            new_text = current.replace(o, n, 1)
-    elif tool == "MultiEdit":
-        edits = ti.get("edits")
-        text = current
-        if isinstance(edits, list):
-            ok = True
-            for e in edits:
-                if not isinstance(e, dict):
-                    ok = False; break
-                o, n = e.get("old_string"), e.get("new_string")
-                if not isinstance(o, str) or not isinstance(n, str) or o not in text:
-                    ok = False; break
-                text = text.replace(o, n, 1)
-            if ok:
-                new_text = text
+    if tool == "Bash":
+        # A Bash write target has no reconstructible content shape; the
+        # gate can only see that the state file is being touched while an
+        # incident is open, not what its resulting status will be. Fail
+        # closed rather than guess.
+        deny(
+            "the record currently reads status: incident, and this Bash command's "
+            "target resolves to %s, but the gate cannot determine the resulting "
+            "content from a shell command — failing closed rather than letting an "
+            "unreadable incident close through." % rel
+        )
 
-    if new_text is None:
+    new_text, ok = gate_lib.gate_reconstruct_write(tool, ti, current)
+    if not ok or new_text is None:
         deny(
             "the record currently reads status: incident, and this write targets %s, "
             "but the gate cannot determine the resulting content from the tool input "
@@ -141,7 +139,7 @@ try:
         )
 
     pm_abs = resolve(pm_path)
-    if not os.path.isfile(pm_abs):
+    if pm_abs is None or not os.path.isfile(pm_abs):
         deny(
             "incident -> steady is refused — postmortem: names %r, which does not "
             "exist as a file; the postmortem must actually be filed, not merely "

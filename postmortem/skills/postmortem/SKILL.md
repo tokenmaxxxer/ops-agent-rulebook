@@ -18,7 +18,7 @@ description: >-
 
 Belongs to the `incident` state, run once the incident is over. Writes
 `ops/postmortem-<incident-id>.md` using
-`ops-cycle/skills/postmortem/templates/postmortem-template.md` as the field
+`postmortem/skills/postmortem/templates/postmortem-template.md` as the field
 skeleton. Writing this file is never gated — it is not `ops/state.md`.
 
 ## Required trigger criteria (fixed before the fact, per Google's stated
