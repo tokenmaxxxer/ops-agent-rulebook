@@ -1,22 +1,23 @@
-# tokenmaxxxer / ops-agent-rulebook
+# tokenmaxxxer / release-engineering-rulebook
 
-The `ops` role on contract v3. An ops session is spawned with two plugin
-sets installed: this marketplace's `ops` plugin, and the
+The `release-engineering` role on contract v3. A release-engineering
+session is spawned with two plugin sets installed: this marketplace's
+`release-engineering` plugin, and the
 [tokenmaxxxer-core](https://github.com/tokenmaxxxer/tokenmaxxxer-core)
 plugins (`core`, `terse`, `freelunch`, `scout`). Core owns the interaction
 protocol — issue in, two-phase PR out (research/survey/proposal → human
-review Approve → execution), branch `issue-<n>/ops`, record at
-`docs/issue-<n>/reports/ops.md`. This rulebook owns only what is
-ops-specific.
+review Approve → execution), branch `issue-<n>/release-engineering`,
+record at `docs/issue-<n>/reports/release-engineering.md`. This rulebook
+owns only what is release-engineering-specific.
 
-## What `ops` decides
+## What `release-engineering` decides
 
 Whether a change may ship, and — after it ships — whether it keeps
 running, gated by measurable reliability rather than discretionary
-sign-off. ops consumes the measurement design feasibility produced; it
-never invents what "healthy" means. It prevents shipping without a
-rollback path, without a numeric health definition, and any release step
-once the error budget is spent.
+sign-off. release-engineering consumes the measurement design feasibility
+produced; it never invents what "healthy" means. It prevents shipping
+without a rollback path, without a numeric health definition, and any
+release step once the error budget is spent.
 
 ## What is here
 
@@ -77,8 +78,8 @@ Postmortems live at `docs/issue-<n>/reports/postmortems/<slug>.md`
 
 ## Install
 
-    claude plugin marketplace add tokenmaxxxer/ops-agent-rulebook
-    claude plugin install ops@tokenmaxxxer-ops
+    claude plugin marketplace add tokenmaxxxer/release-engineering-rulebook
+    claude plugin install release-engineering@tokenmaxxxer-release-engineering
 
 Per-plugin gate kill switches are listed in "What is here" above; there is
 no single repo-wide `OPS_CYCLE_OFF`.
@@ -87,9 +88,13 @@ no single repo-wide `OPS_CYCLE_OFF`.
 
     /bin/bash tests/parse-check.sh
     /bin/bash tests/deny-only-check.sh
+    /bin/bash tests/role-name-check.sh
     /bin/bash <core>/hooks/tests/stub-check.sh ops/hooks
     /bin/bash <core>/hooks/tests/compliance-check.sh readiness-checklist/hooks
     /bin/bash readiness-checklist/hooks/tests/allow-deny-check.sh
+
+`tests/parse-check.sh`'s no-arg form now defaults to the repo root
+(issue-39), so it walks every plugin's `hooks/` tree, not just `ops/hooks`.
 
 The role-agnostic gates (trailer/record-fields/handbook-trigger) and their
 tests now live in core canon (core issues #63/#66); this repo no longer

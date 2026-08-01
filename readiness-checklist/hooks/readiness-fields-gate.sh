@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-. "${CLAUDE_PLUGIN_ROOT_CORE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../core" && pwd -P)}/hooks/lib/gate-lib.sh"
+. "${CLAUDE_PLUGIN_ROOT_CORE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../core" && pwd -P)}/hooks/lib/gate-lib.sh" || { echo "readiness-fields-gate.sh: cannot source gate-lib.sh" >&2; exit 2; }
 gate_trap_fail_closed
 # PreToolUse gate (Write|Edit|MultiEdit) — issue-33, migrated to the
 # gate-house standard (issue-36, core issue #72's shared gate-lib.sh/
@@ -55,18 +55,26 @@ try:
     if not root:
         deny("no project root could be determined; failing closed.")
 
-    path = None
+    candidates = []
     if tool in ("Write", "Edit", "MultiEdit"):
         p = ti.get("file_path")
         if isinstance(p, str) and p:
-            path = p
-    if path is None:
+            candidates.append(p)
+    elif tool == "Bash":
+        cmd = ti.get("command")
+        if isinstance(cmd, str) and cmd:
+            candidates.extend(gate_lib.gate_bash_write_targets(cmd))
+
+    if not candidates:
         sys.exit(0)
 
-    rel = gate_lib.gate_normalize_path(root, path)
+    rel = None
+    for c in candidates:
+        r = gate_lib.gate_normalize_path(root, c)
+        if r == "ops/state.md":
+            rel = r
+            break
     if rel is None:
-        sys.exit(0)  # resolves outside the project root — not this gate's business
-    if rel != "ops/state.md":
         sys.exit(0)  # not the state file — not this gate's business
 
     r = posixpath.join(root, rel)
@@ -77,6 +85,18 @@ try:
                 current = fh.read(1 << 20)
         except OSError:
             deny("%s exists but cannot be read; failing closed." % rel)
+
+    if tool == "Bash":
+        # A Bash write target has no reconstructible content shape; the
+        # gate can only see that the state file is being touched, not what
+        # its resulting status/checklist will be. Fail closed rather than
+        # guess.
+        deny(
+            "this Bash command's target resolves to %s (the readiness state file) but "
+            "the gate cannot determine the resulting content from a shell command. "
+            "Write the file with Write, or use an Edit/MultiEdit, so the checklist "
+            "can be checked." % rel
+        )
 
     new_text, ok = gate_lib.gate_reconstruct_write(tool, ti, current)
     if not ok or new_text is None:

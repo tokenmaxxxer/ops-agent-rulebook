@@ -1,11 +1,11 @@
 {
-  "name": "tokenmaxxxer-ops",
+  "name": "tokenmaxxxer-release-engineering",
   "owner": {
     "name": "Jung Jiwon & Lee Jongkwan"
   },
   "plugins": [
     {
-      "name": "ops",
+      "name": "release-engineering",
       "source": "./ops",
       "description": "The release-engineering role directive and phase-1/phase-2 norm composer on contract v3 (issue-33): itself owns no methodology gate; composes proposal-norm (phase 1) and readiness-checklist + rollout-plan + error-budget-policy + postmortem (phase 2, together) into one role directive."
     },

@@ -148,4 +148,26 @@ status: rollout
 - item: This is not inside a Checklist section | status: yes | artifact:'
 run_write "no ## Checklist heading at all, item-shaped line elsewhere -> deny (no real checklist)" 2 "$no_heading"
 
+# --- Missing-core case: CLAUDE_PLUGIN_ROOT_CORE points at a nonexistent
+# path, run from a tempdir with no ../../core fallback reachable either —
+# the gate must fail closed (exit 2), not silently allow (issue-39
+# mandatory case #7, the exact issue-75-confirmed fail-open shape when the
+# `||` guard is missing on the gate-lib.sh source line).
+td="$(mktemp -d)"
+payload="$(python3 -c 'import json,sys; print(json.dumps({"tool_name":"Write","tool_input":{"file_path":"ops/state.md","content":"nothing here"},"cwd":sys.argv[1]}))' "$td")"
+missing_core="$td/does-not-exist-core"
+run_payload "missing core (CLAUDE_PLUGIN_ROOT_CORE unreachable, no ../../core fallback) -> deny (exit 2)" 2 "$payload" CLAUDE_PROJECT_DIR="$td" CLAUDE_PLUGIN_ROOT_CORE="$missing_core"
+rm -rf "$td"
+
+# --- Bash-bypass case: a Bash command reaching ops/state.md must be
+# caught, not silently pass through the PreToolUse gate because it used a
+# shell instead of Write/Edit/MultiEdit (issue-39 mandatory case; matches
+# the deny verdict of the "no artifact" Write fixture above).
+td="$(mktemp -d)"
+mkdir -p "$td/ops"
+printf '%s' "$no_artifact" > "$td/ops/state.md"
+bash_payload="$(python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","tool_input":{"command":"cd ../.. && echo x >> ops/state.md"},"cwd":sys.argv[1]}))' "$td")"
+run_payload "Bash write to ops/state.md -> denies" 2 "$bash_payload" CLAUDE_PROJECT_DIR="$td"
+rm -rf "$td"
+
 exit "$fail"
