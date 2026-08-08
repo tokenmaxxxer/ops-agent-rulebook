@@ -1,5 +1,5 @@
 ---
-status: approved
+status: landed
 files:
   - ops-cycle/hooks/state-gate.sh
   - ops-cycle/hooks/doc-bucket-gate.sh
